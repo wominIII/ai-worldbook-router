@@ -82,6 +82,179 @@ let lastRun = {
     routerRaw: '',
 };
 let burstCleanupTimer = null;
+let routerBusyPromise = null;
+let resolveRouterBusy = null;
+let isGenerationActive = false;
+let pendingCompatSend = false;
+let compatFlushScheduled = false;
+let suppressCompatReplay = false;
+let compatHooksInstalled = false;
+let compatHookRetryTimer = null;
+let compatGenerateHookTimer = null;
+
+function beginRouterBusy() {
+    if (routerBusyPromise) {
+        return () => { };
+    }
+
+    routerBusyPromise = new Promise((resolve) => {
+        resolveRouterBusy = resolve;
+    });
+
+    return () => {
+        if (!routerBusyPromise) {
+            return;
+        }
+
+        const resolve = resolveRouterBusy;
+        routerBusyPromise = null;
+        resolveRouterBusy = null;
+        resolve?.();
+        scheduleCompatFlush();
+    };
+}
+
+async function waitForCompatIdle() {
+    if (routerBusyPromise) {
+        try {
+            await routerBusyPromise;
+        } catch {
+            // no-op
+        }
+    }
+
+    if (!isGenerationActive) {
+        return;
+    }
+
+    await new Promise((resolve) => {
+        let settled = false;
+        const done = () => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            resolve();
+        };
+
+        eventSource.once(event_types.GENERATION_ENDED, done);
+        eventSource.once(event_types.GENERATION_STOPPED, done);
+    });
+}
+
+function scheduleCompatFlush() {
+    if (compatFlushScheduled || !pendingCompatSend) {
+        return;
+    }
+
+    compatFlushScheduled = true;
+    (async () => {
+        try {
+            await waitForCompatIdle();
+            await new Promise(resolve => setTimeout(resolve, 250));
+
+            if (!pendingCompatSend || routerBusyPromise || isGenerationActive) {
+                return;
+            }
+
+            const sendButton = document.getElementById('send_but');
+            if (!sendButton) {
+                return;
+            }
+
+            pendingCompatSend = false;
+            suppressCompatReplay = true;
+            setTimeout(() => {
+                try {
+                    sendButton.click();
+                } finally {
+                    setTimeout(() => {
+                        suppressCompatReplay = false;
+                    }, 180);
+                }
+            }, 0);
+        } finally {
+            compatFlushScheduled = false;
+            if (pendingCompatSend && !compatFlushScheduled) {
+                scheduleCompatFlush();
+            }
+        }
+    })();
+}
+
+function queueCompatSend(event) {
+    if (!settings.enabled || suppressCompatReplay || !routerBusyPromise) {
+        return false;
+    }
+
+    pendingCompatSend = true;
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+    debugLog('Queued competing send until router idle');
+    scheduleCompatFlush();
+    return true;
+}
+
+function handleCompatTextareaKeydown(event) {
+    const isEnter = event.key === 'Enter' || event.code === 'Enter' || event.keyCode === 13;
+    if (!isEnter || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) {
+        return;
+    }
+
+    queueCompatSend(event);
+}
+
+function installCompatSendHooks() {
+    const sendButton = document.getElementById('send_but');
+    const textarea = document.getElementById('send_textarea');
+
+    if (sendButton && !sendButton.dataset.aiWbrCompatHook) {
+        sendButton.addEventListener('click', queueCompatSend, true);
+        sendButton.dataset.aiWbrCompatHook = '1';
+    }
+
+    if (textarea && !textarea.dataset.aiWbrCompatHook) {
+        textarea.addEventListener('keydown', handleCompatTextareaKeydown, true);
+        textarea.dataset.aiWbrCompatHook = '1';
+    }
+
+    compatHooksInstalled = !!(sendButton && textarea);
+    if (!compatHooksInstalled && !compatHookRetryTimer) {
+        compatHookRetryTimer = setTimeout(() => {
+            compatHookRetryTimer = null;
+            installCompatSendHooks();
+        }, 1200);
+    }
+}
+
+function ensureTavernHelperCompatHook() {
+    const helper = globalThis.TavernHelper;
+    const original = helper?.generate;
+    if (!helper || typeof original !== 'function' || original.__aiWbrCompatWrapped) {
+        return;
+    }
+
+    const wrapped = async function (...args) {
+        if (settings.enabled && !suppressCompatReplay && (routerBusyPromise || isGenerationActive)) {
+            debugLog('Waiting for router idle before TavernHelper.generate');
+            await waitForCompatIdle();
+            await new Promise(resolve => setTimeout(resolve, 250));
+        }
+
+        return await original.apply(this, args);
+    };
+
+    Object.defineProperty(wrapped, '__aiWbrCompatWrapped', {
+        value: true,
+        configurable: false,
+        enumerable: false,
+        writable: false,
+    });
+
+    helper.generate = wrapped;
+}
 
 function ensureSettings() {
     if (!extension_settings[MODULE_NAME]) {
@@ -1365,6 +1538,7 @@ async function interceptGeneration(chat, contextSize, abort, type) {
     }
 
     const context = getContext();
+    const endRouterBusy = beginRouterBusy();
     clearEntryBurst();
     startWorldInfoAnimation();
     try {
@@ -1415,6 +1589,7 @@ async function interceptGeneration(chat, contextSize, abort, type) {
         console.error(`${LOG_PREFIX} Interceptor failed`, error);
     } finally {
         stopWorldInfoAnimation();
+        endRouterBusy();
     }
 }
 
@@ -1555,10 +1730,29 @@ globalThis.ai_worldbook_router_intercept = interceptGeneration;
 jQuery(async () => {
     ensureSettings();
     await addSettingsUi();
+    installCompatSendHooks();
+    ensureTavernHelperCompatHook();
+    if (!compatGenerateHookTimer) {
+        compatGenerateHookTimer = setInterval(ensureTavernHelperCompatHook, 1500);
+    }
+
+    eventSource.on(event_types.GENERATION_STARTED, () => {
+        isGenerationActive = true;
+    });
+    eventSource.on(event_types.GENERATION_ENDED, () => {
+        isGenerationActive = false;
+        scheduleCompatFlush();
+    });
+    eventSource.on(event_types.GENERATION_STOPPED, () => {
+        isGenerationActive = false;
+        scheduleCompatFlush();
+    });
 
     eventSource.on(event_types.CHAT_CHANGED, () => {
         clearEntryBurst();
         stopWorldInfoAnimation();
+        pendingCompatSend = false;
+        suppressCompatReplay = false;
         lastRun = {
             candidates: [],
             selected: [],
