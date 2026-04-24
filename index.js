@@ -1765,15 +1765,17 @@ async function routeWorldbookForMessages(context, recentMessages, routeSource = 
     let routerPrompt = '';
     let routerRaw = '';
     let source = `ai-${routeSource}`;
+    let shouldFallback = false;
     try {
         isRouterSelectionRequest = true;
         const aiResult = await selectWithAi(context, recentMessages, mvuSummary, candidates);
         selected = aiResult.selected;
         routerPrompt = aiResult.prompt;
         routerRaw = aiResult.rawPreview;
-        source = selected.length ? `ai-${routeSource}` : `keyword-empty-ai-${routeSource}`;
+        source = selected.length ? `ai-${routeSource}` : `empty-ai-${routeSource}`;
     } catch (error) {
         source = `keyword-ai-fallback-${routeSource}`;
+        shouldFallback = true;
         console.warn(`${LOG_PREFIX} AI selection failed; falling back to keyword score.`, error);
         routerPrompt = error?.routerPrompt || '';
         routerRaw = error?.routerRaw || error?.message || String(error);
@@ -1781,7 +1783,7 @@ async function routeWorldbookForMessages(context, recentMessages, routeSource = 
         isRouterSelectionRequest = false;
     }
 
-    if (!selected.length) {
+    if (shouldFallback && !selected.length) {
         selected = selectWithFallback(candidates);
     }
 
