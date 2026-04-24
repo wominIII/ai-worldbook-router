@@ -91,6 +91,7 @@ let suppressCompatReplay = false;
 let compatHooksInstalled = false;
 let compatHookRetryTimer = null;
 let compatGenerateHookTimer = null;
+let isCompatRouterRunning = false;
 
 function beginRouterBusy() {
     if (routerBusyPromise) {
@@ -207,53 +208,88 @@ function handleCompatTextareaKeydown(event) {
 }
 
 function installCompatSendHooks() {
-    const sendButton = document.getElementById('send_but');
-    const textarea = document.getElementById('send_textarea');
+    try {
+        const sendButton = document.getElementById('send_but');
+        const textarea = document.getElementById('send_textarea');
 
-    if (sendButton && !sendButton.dataset.aiWbrCompatHook) {
-        sendButton.addEventListener('click', queueCompatSend, true);
-        sendButton.dataset.aiWbrCompatHook = '1';
-    }
+        if (sendButton && !sendButton.dataset.aiWbrCompatHook) {
+            sendButton.addEventListener('click', queueCompatSend, true);
+            sendButton.dataset.aiWbrCompatHook = '1';
+        }
 
-    if (textarea && !textarea.dataset.aiWbrCompatHook) {
-        textarea.addEventListener('keydown', handleCompatTextareaKeydown, true);
-        textarea.dataset.aiWbrCompatHook = '1';
-    }
+        if (textarea && !textarea.dataset.aiWbrCompatHook) {
+            textarea.addEventListener('keydown', handleCompatTextareaKeydown, true);
+            textarea.dataset.aiWbrCompatHook = '1';
+        }
 
-    compatHooksInstalled = !!(sendButton && textarea);
-    if (!compatHooksInstalled && !compatHookRetryTimer) {
-        compatHookRetryTimer = setTimeout(() => {
-            compatHookRetryTimer = null;
-            installCompatSendHooks();
-        }, 1200);
+        compatHooksInstalled = !!(sendButton && textarea);
+        if (!compatHooksInstalled && !compatHookRetryTimer) {
+            compatHookRetryTimer = setTimeout(() => {
+                compatHookRetryTimer = null;
+                installCompatSendHooks();
+            }, 1200);
+        }
+    } catch (error) {
+        console.warn(`${LOG_PREFIX} Failed to install compatibility send hooks`, error);
     }
 }
 
 function ensureTavernHelperCompatHook() {
-    const helper = globalThis.TavernHelper;
-    const original = helper?.generate;
-    if (!helper || typeof original !== 'function' || original.__aiWbrCompatWrapped) {
+    try {
+        const helper = globalThis.TavernHelper;
+        const original = helper?.generate;
+        if (!helper || typeof original !== 'function' || original.__aiWbrCompatWrapped) {
+            return false;
+        }
+
+        const wrapped = async function (...args) {
+            if (settings.enabled && !suppressCompatReplay && (routerBusyPromise || isGenerationActive)) {
+                debugLog('Waiting for router idle before TavernHelper.generate');
+                await waitForCompatIdle();
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
+
+            if (settings.enabled && !suppressCompatReplay && !isCompatRouterRunning) {
+                const routed = await runTavernHelperRoute(args);
+                if (routed) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+
+            return await original.apply(this, args);
+        };
+
+        Object.defineProperty(wrapped, '__aiWbrCompatWrapped', {
+            value: true,
+            configurable: false,
+            enumerable: false,
+            writable: false,
+        });
+
+        helper.generate = wrapped;
+        return true;
+    } catch (error) {
+        console.warn(`${LOG_PREFIX} Failed to install TavernHelper compatibility hook`, error);
+        return false;
+    }
+}
+
+function startCompatGenerateHookPolling() {
+    if (compatGenerateHookTimer) {
         return;
     }
 
-    const wrapped = async function (...args) {
-        if (settings.enabled && !suppressCompatReplay && (routerBusyPromise || isGenerationActive)) {
-            debugLog('Waiting for router idle before TavernHelper.generate');
-            await waitForCompatIdle();
-            await new Promise(resolve => setTimeout(resolve, 250));
+    compatGenerateHookTimer = setInterval(() => {
+        try {
+            const installed = ensureTavernHelperCompatHook();
+            if (installed) {
+                clearInterval(compatGenerateHookTimer);
+                compatGenerateHookTimer = null;
+            }
+        } catch (error) {
+            console.warn(`${LOG_PREFIX} Compatibility polling failed`, error);
         }
-
-        return await original.apply(this, args);
-    };
-
-    Object.defineProperty(wrapped, '__aiWbrCompatWrapped', {
-        value: true,
-        configurable: false,
-        enumerable: false,
-        writable: false,
-    });
-
-    helper.generate = wrapped;
+    }, 1500);
 }
 
 function ensureSettings() {
@@ -572,6 +608,60 @@ function getRecentMessages(chat) {
             text: String(message.mes || ''),
             isUser: !!message.is_user,
         }));
+}
+
+function getTavernHelperInput(options) {
+    if (!options || typeof options !== 'object') {
+        return '';
+    }
+
+    const injected = Array.isArray(options.injects)
+        ? options.injects.find(entry => entry && typeof entry.content === 'string' && entry.content.trim())?.content
+        : '';
+
+    return String(
+        injected
+        || options.user_input
+        || options.prompt
+        || options.message
+        || ''
+    ).trim();
+}
+
+function buildCompatRecentMessages(context, options) {
+    const chat = Array.isArray(context?.chat) ? context.chat : [];
+    const recentMessages = getRecentMessages(chat);
+    const input = getTavernHelperInput(options);
+
+    if (!input) {
+        return recentMessages;
+    }
+
+    const last = recentMessages[recentMessages.length - 1];
+    if (last?.isUser && last.text.trim() === input) {
+        return recentMessages;
+    }
+
+    return [
+        ...recentMessages,
+        {
+            name: context?.name1 || 'User',
+            text: input,
+            isUser: true,
+        },
+    ].slice(-settings.scanMessages);
+}
+
+function shouldRouteTavernHelperGenerate(options) {
+    if (!options || typeof options !== 'object') {
+        return false;
+    }
+
+    if (options.quiet_prompt || options.quiet || options.automatic_trigger) {
+        return false;
+    }
+
+    return !!getTavernHelperInput(options);
 }
 
 function getLastUserMessage(recentMessages) {
@@ -1450,6 +1540,94 @@ function debugError(error) {
     renderDebugPanel();
 }
 
+async function routeWorldbookForMessages(context, recentMessages, routeSource = 'generate_interceptor', logMeta = {}) {
+    const lastUserMessage = getLastUserMessage(recentMessages);
+    debugLog('Generation intercepted', { ...logMeta, routeSource, lastUserMessage });
+
+    const mvuSummary = getMvuSummary(context);
+    const entries = await getWorldbookEntries(context);
+    const candidates = recallCandidates(entries, recentMessages, mvuSummary);
+
+    if (candidates.length === 0) {
+        debugRun([], [], '', `none-${routeSource}`);
+        return {
+            candidates,
+            selected: [],
+            injection: '',
+            source: `none-${routeSource}`,
+        };
+    }
+
+    let selected = [];
+    let routerPrompt = '';
+    let routerRaw = '';
+    let source = `ai-${routeSource}`;
+    try {
+        const aiResult = await selectWithAi(context, recentMessages, mvuSummary, candidates);
+        selected = aiResult.selected;
+        routerPrompt = aiResult.prompt;
+        routerRaw = aiResult.rawPreview;
+        source = selected.length ? `ai-${routeSource}` : `keyword-empty-ai-${routeSource}`;
+    } catch (error) {
+        source = `keyword-ai-fallback-${routeSource}`;
+        console.warn(`${LOG_PREFIX} AI selection failed; falling back to keyword score.`, error);
+        routerPrompt = error?.routerPrompt || '';
+        routerRaw = error?.routerRaw || error?.message || String(error);
+    }
+
+    if (!selected.length) {
+        selected = selectWithFallback(candidates);
+    }
+
+    const injection = buildInjection(selected);
+    setExtensionPrompt(PROMPT_KEY, injection, settings.position, settings.depth, false, settings.role);
+    debugRun(candidates, selected, injection, source, routerPrompt, routerRaw);
+
+    return {
+        candidates,
+        selected,
+        injection,
+        source,
+    };
+}
+
+async function runTavernHelperRoute(args) {
+    const options = args?.[0];
+    if (!shouldRouteTavernHelperGenerate(options)) {
+        return false;
+    }
+
+    isCompatRouterRunning = true;
+    const endRouterBusy = beginRouterBusy();
+    setExtensionPrompt(PROMPT_KEY, '', settings.position, settings.depth, false, settings.role);
+    clearEntryBurst();
+    startWorldInfoAnimation();
+
+    try {
+        const context = getContext();
+        const recentMessages = buildCompatRecentMessages(context, options);
+        const result = await routeWorldbookForMessages(context, recentMessages, 'tavernhelper_generate', {
+            type: 'tavernhelper',
+        });
+
+        stopWorldInfoAnimation();
+        if (result.selected.length && !result.source.includes('fallback')) {
+            playSelectedEntriesBurst(result.selected);
+        }
+
+        return true;
+    } catch (error) {
+        setExtensionPrompt(PROMPT_KEY, '', settings.position, settings.depth, false, settings.role);
+        debugError(error);
+        console.error(`${LOG_PREFIX} TavernHelper route failed`, error);
+        return false;
+    } finally {
+        stopWorldInfoAnimation();
+        endRouterBusy();
+        isCompatRouterRunning = false;
+    }
+}
+
 function renderRouterModelOptions() {
     const select = $('#ai_wbr_router_model');
     if (!select.length) {
@@ -1543,45 +1721,13 @@ async function interceptGeneration(chat, contextSize, abort, type) {
     startWorldInfoAnimation();
     try {
         const recentMessages = getRecentMessages(chat);
-        const lastUserMessage = getLastUserMessage(recentMessages);
-        debugLog('Generation intercepted', { type, contextSize, lastUserMessage });
-
-        const mvuSummary = getMvuSummary(context);
-        const entries = await getWorldbookEntries(context);
-        const candidates = recallCandidates(entries, recentMessages, mvuSummary);
-
-        if (candidates.length === 0) {
-            debugRun([], [], '', 'none');
-            return;
-        }
-
-        let selected = [];
-        let routerPrompt = '';
-        let routerRaw = '';
-        let source = 'ai';
-        try {
-            const aiResult = await selectWithAi(context, recentMessages, mvuSummary, candidates);
-            selected = aiResult.selected;
-            routerPrompt = aiResult.prompt;
-            routerRaw = aiResult.rawPreview;
-            source = selected.length ? 'ai' : 'keyword-empty-ai';
-        } catch (error) {
-            source = 'keyword-ai-fallback';
-            console.warn(`${LOG_PREFIX} AI selection failed; falling back to keyword score.`, error);
-            routerPrompt = error?.routerPrompt || '';
-            routerRaw = error?.routerRaw || error?.message || String(error);
-        }
-
-        if (!selected.length) {
-            selected = selectWithFallback(candidates);
-        }
-
-        const injection = buildInjection(selected);
-        setExtensionPrompt(PROMPT_KEY, injection, settings.position, settings.depth, false, settings.role);
-        debugRun(candidates, selected, injection, source, routerPrompt, routerRaw);
+        const result = await routeWorldbookForMessages(context, recentMessages, 'generate_interceptor', {
+            type,
+            contextSize,
+        });
         stopWorldInfoAnimation();
-        if (selected.length && source !== 'keyword-ai-fallback') {
-            playSelectedEntriesBurst(selected);
+        if (result.selected.length && !result.source.includes('fallback')) {
+            playSelectedEntriesBurst(result.selected);
         }
     } catch (error) {
         setExtensionPrompt(PROMPT_KEY, '', settings.position, settings.depth, false, settings.role);
@@ -1728,44 +1874,46 @@ async function addSettingsUi() {
 globalThis.ai_worldbook_router_intercept = interceptGeneration;
 
 jQuery(async () => {
-    ensureSettings();
-    await addSettingsUi();
-    installCompatSendHooks();
-    ensureTavernHelperCompatHook();
-    if (!compatGenerateHookTimer) {
-        compatGenerateHookTimer = setInterval(ensureTavernHelperCompatHook, 1500);
+    try {
+        ensureSettings();
+        await addSettingsUi();
+        installCompatSendHooks();
+        ensureTavernHelperCompatHook();
+        startCompatGenerateHookPolling();
+
+        eventSource.on(event_types.GENERATION_STARTED, () => {
+            isGenerationActive = true;
+        });
+        eventSource.on(event_types.GENERATION_ENDED, () => {
+            isGenerationActive = false;
+            scheduleCompatFlush();
+        });
+        eventSource.on(event_types.GENERATION_STOPPED, () => {
+            isGenerationActive = false;
+            scheduleCompatFlush();
+        });
+
+        eventSource.on(event_types.CHAT_CHANGED, () => {
+            clearEntryBurst();
+            stopWorldInfoAnimation();
+            pendingCompatSend = false;
+            suppressCompatReplay = false;
+            lastRun = {
+                candidates: [],
+                selected: [],
+                injectedChars: 0,
+                injectionText: '',
+                source: 'none',
+                error: '',
+                routerPrompt: '',
+                routerRaw: '',
+            };
+            setExtensionPrompt(PROMPT_KEY, '', settings.position, settings.depth, false, settings.role);
+            renderDebugPanel();
+        });
+
+        debugLog('Loaded');
+    } catch (error) {
+        console.error(`${LOG_PREFIX} Failed during initialization`, error);
     }
-
-    eventSource.on(event_types.GENERATION_STARTED, () => {
-        isGenerationActive = true;
-    });
-    eventSource.on(event_types.GENERATION_ENDED, () => {
-        isGenerationActive = false;
-        scheduleCompatFlush();
-    });
-    eventSource.on(event_types.GENERATION_STOPPED, () => {
-        isGenerationActive = false;
-        scheduleCompatFlush();
-    });
-
-    eventSource.on(event_types.CHAT_CHANGED, () => {
-        clearEntryBurst();
-        stopWorldInfoAnimation();
-        pendingCompatSend = false;
-        suppressCompatReplay = false;
-        lastRun = {
-            candidates: [],
-            selected: [],
-            injectedChars: 0,
-            injectionText: '',
-            source: 'none',
-            error: '',
-            routerPrompt: '',
-            routerRaw: '',
-        };
-        setExtensionPrompt(PROMPT_KEY, '', settings.position, settings.depth, false, settings.role);
-        renderDebugPanel();
-    });
-
-    debugLog('Loaded');
 });
