@@ -6,7 +6,7 @@
     "generate_interceptor": "ai_worldbook_router_intercept",
     "js": "index.js",
     "css": "style.css",
-    "author": "Codex",
+    "author": "zmer",
     "version": "0.1.0",
     "homePage": "https://github.com/SillyTavern/SillyTavern"
 }
