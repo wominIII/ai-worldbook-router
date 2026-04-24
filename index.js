@@ -242,6 +242,10 @@ function ensureTavernHelperCompatHook() {
             return false;
         }
 
+        if (globalThis.original_TavernHelper_generate_ACU?.__aiWbrCompatWrapped) {
+            return false;
+        }
+
         const wrapped = async function (...args) {
             if (settings.enabled && !suppressCompatReplay && (routerBusyPromise || isGenerationActive)) {
                 debugLog('Waiting for router idle before TavernHelper.generate');
@@ -281,11 +285,7 @@ function startCompatGenerateHookPolling() {
 
     compatGenerateHookTimer = setInterval(() => {
         try {
-            const installed = ensureTavernHelperCompatHook();
-            if (installed) {
-                clearInterval(compatGenerateHookTimer);
-                compatGenerateHookTimer = null;
-            }
+            ensureTavernHelperCompatHook();
         } catch (error) {
             console.warn(`${LOG_PREFIX} Compatibility polling failed`, error);
         }
@@ -654,6 +654,10 @@ function buildCompatRecentMessages(context, options) {
 
 function shouldRouteTavernHelperGenerate(options) {
     if (!options || typeof options !== 'object') {
+        return false;
+    }
+
+    if (options._ai_wbr_routed) {
         return false;
     }
 
@@ -1597,6 +1601,7 @@ async function runTavernHelperRoute(args) {
         return false;
     }
 
+    options._ai_wbr_routed = true;
     isCompatRouterRunning = true;
     const endRouterBusy = beginRouterBusy();
     setExtensionPrompt(PROMPT_KEY, '', settings.position, settings.depth, false, settings.role);
