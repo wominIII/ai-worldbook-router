@@ -178,6 +178,69 @@
     resize: vertical;
 }
 
+.ai-wbr-token-editor {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    margin-top: 0.35rem;
+}
+
+.ai-wbr-token-editor .menu_button {
+    width: auto;
+    min-width: 4.5rem;
+    white-space: nowrap;
+}
+
+.ai-wbr-token-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.6rem;
+}
+
+.ai-wbr-token-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.32rem 0.48rem 0.32rem 0.58rem;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 999px;
+    background: var(--SmartThemeBlurTintColor);
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.ai-wbr-token-label {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+
+.ai-wbr-token-remove {
+    width: 1.35rem;
+    height: 1.35rem;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex: 0 0 auto;
+}
+
+.ai-wbr-token-remove:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.ai-wbr-token-empty {
+    opacity: 0.72;
+    font-size: 0.92em;
+}
+
 .ai-wbr-debug {
     margin-top: 0.75rem;
 }
@@ -250,6 +313,11 @@
 @media (max-width: 640px) {
     .ai-wbr-grid {
         grid-template-columns: 1fr;
+    }
+
+    .ai-wbr-token-editor {
+        flex-direction: column;
+        align-items: stretch;
     }
 }
 

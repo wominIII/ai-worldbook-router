@@ -59,9 +59,9 @@ const defaultSettings = {
     maxChars: 4000,
     scanMessages: 8,
     keywordRecall: true,
-    semanticRecall: false,
     useMvu: false,
     allowConstant: false,
+    titleBlocklist: '',
     position: extension_prompt_types.IN_CHAT,
     depth: 4,
     role: extension_prompt_roles.SYSTEM,
@@ -336,6 +336,41 @@ function countTermHits(text, term) {
 
 function normalizeUrl(value) {
     return String(value ?? '').trim().replace(/\/+$/, '');
+}
+
+function parseBlockRules(value) {
+    return String(value ?? '')
+        .split(/\r?\n/u)
+        .map(line => line.trim())
+        .filter(Boolean);
+}
+
+function matchesBlockRule(text, rule) {
+    const source = String(text ?? '');
+    const rawRule = String(rule ?? '').trim();
+    if (!source || !rawRule) {
+        return false;
+    }
+
+    const regexMatch = rawRule.match(/^\/(.+)\/([a-z]*)$/iu);
+    if (regexMatch) {
+        try {
+            return new RegExp(regexMatch[1], regexMatch[2]).test(source);
+        } catch {
+            return false;
+        }
+    }
+
+    return normalizeText(source).includes(normalizeText(rawRule));
+}
+
+function getBlockedTitleRule(entry) {
+    const comment = String(entry?.comment || '').trim();
+    if (!comment) {
+        return '';
+    }
+
+    return parseBlockRules(settings.titleBlocklist).find(rule => matchesBlockRule(comment, rule)) || '';
 }
 
 function getEntryId(entry, fallback) {
@@ -654,15 +689,12 @@ function recallCandidates(entries, recentMessages, mvuSummary) {
     const candidates = entries
         .filter(entry => entry.content && !entry.disable)
         .filter(entry => settings.allowConstant || !entry.constant)
+        .filter(entry => !getBlockedTitleRule(entry))
         .map(entry => {
             const { score, matchedKeys, matchedSignals } = scoreEntry(entry, matchText, lastUserMessage, recentText);
             return { ...entry, score, matchedKeys, matchedSignals };
         })
         .filter(entry => !settings.keywordRecall || entry.score > 0);
-
-    if (settings.semanticRecall) {
-        debugLog('Semantic recall is enabled in settings but embedding recall is not implemented in the MVP yet.');
-    }
 
     return candidates
         .sort((a, b) => (b.score - a.score) || (b.order - a.order))
@@ -1418,6 +1450,67 @@ function bindText(id, key, normalizer = (value) => String(value)) {
     });
 }
 
+function renderTitleBlocklistEditor() {
+    const container = $('#ai_wbr_title_block_items');
+    if (!container.length) {
+        return;
+    }
+
+    const rules = parseBlockRules(settings.titleBlocklist);
+    container.empty();
+
+    if (!rules.length) {
+        container.append('<div class="ai-wbr-token-empty">暂无拦截标题</div>');
+        return;
+    }
+
+    for (const rule of rules) {
+        const item = $('<div class="ai-wbr-token-item"></div>');
+        item.append($('<span class="ai-wbr-token-label"></span>').text(rule));
+        item.append($('<button class="ai-wbr-token-remove" type="button" aria-label="删除">×</button>')
+            .on('click', () => {
+                const nextRules = parseBlockRules(settings.titleBlocklist).filter(entry => entry !== rule);
+                saveSetting('titleBlocklist', nextRules.join('\n'));
+                renderTitleBlocklistEditor();
+            }));
+        container.append(item);
+    }
+}
+
+function bindTitleBlocklistEditor() {
+    const input = $('#ai_wbr_title_block_input');
+    const button = $('#ai_wbr_title_block_add');
+    if (!input.length || !button.length) {
+        return;
+    }
+
+    const submit = () => {
+        const value = String(input.val() || '').trim();
+        if (!value) {
+            return;
+        }
+
+        const rules = parseBlockRules(settings.titleBlocklist);
+        if (!rules.includes(value)) {
+            rules.push(value);
+            saveSetting('titleBlocklist', rules.join('\n'));
+        }
+
+        input.val('');
+        renderTitleBlocklistEditor();
+    };
+
+    button.on('click', submit);
+    input.on('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            submit();
+        }
+    });
+
+    renderTitleBlocklistEditor();
+}
+
 async function addSettingsUi() {
     const html = await renderExtensionTemplateAsync('third-party/ai-worldbook-router', 'settings');
     $('#extensions_settings2').append(html);
@@ -1426,7 +1519,6 @@ async function addSettingsUi() {
     bindCheckbox('#ai_wbr_debug', 'debug');
     bindCheckbox('#ai_wbr_router_use_separate_model', 'routerUseSeparateModel');
     bindCheckbox('#ai_wbr_keyword_recall', 'keywordRecall');
-    bindCheckbox('#ai_wbr_semantic_recall', 'semanticRecall');
     bindCheckbox('#ai_wbr_use_mvu', 'useMvu');
     bindCheckbox('#ai_wbr_allow_constant', 'allowConstant');
 
@@ -1440,6 +1532,7 @@ async function addSettingsUi() {
 
     bindSelectNumber('#ai_wbr_position', 'position');
     bindSelectNumber('#ai_wbr_role', 'role');
+    bindTitleBlocklistEditor();
     bindTextarea('#ai_wbr_system_prompt', 'systemPrompt');
     bindText('#ai_wbr_router_api_url', 'routerApiUrl', normalizeUrl);
     bindText('#ai_wbr_router_api_key', 'routerApiKey', (value) => String(value).trim());

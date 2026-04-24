@@ -20,21 +20,25 @@
                 <span class="fa-solid fa-circle-info ai-wbr-help" title="用最后用户消息、最近上下文和可选状态匹配世界书 keys，先缩小候选范围。推荐开启。"></span>
                 <span>启用关键词粗召回</span>
             </label>
-            <label class="checkbox_label" for="ai_wbr_semantic_recall">
-                <input id="ai_wbr_semantic_recall" type="checkbox" />
-                <span class="fa-solid fa-circle-info ai-wbr-help" title="预留给 embedding/vector 召回。当前 MVP 暂不执行语义检索。"></span>
-                <span>启用简单语义粗召回（MVP 暂不调用 embedding）</span>
-            </label>
             <label class="checkbox_label" for="ai_wbr_use_mvu">
                 <input id="ai_wbr_use_mvu" type="checkbox" />
-                <span class="fa-solid fa-circle-info ai-wbr-help" title="尝试读取 Tavern Helper / MVU 的 stat_data，并把地点、NPC、阶段等状态加入匹配与判断。读不到会静默跳过。"></span>
-                <span>读取 MVU/stat_data（可选兼容）</span>
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="尝试把变量卡表格、MVU、Tavern Helper 等状态数据纳入读取范围，并把地点、NPC、阶段等状态加入匹配与判断。读不到会静默跳过。"></span>
+                <span>变量卡表格纳入读取范围</span>
             </label>
             <label class="checkbox_label" for="ai_wbr_allow_constant">
                 <input id="ai_wbr_allow_constant" type="checkbox" />
-                <span class="fa-solid fa-circle-info ai-wbr-help" title="默认跳过 constant 条目，避免和原生世界书常驻注入重复。只有确实需要重复考虑时再开启。"></span>
-                <span>允许重复路由 constant 条目</span>
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="默认跳过 constant 条目，避免和原生世界书常驻注入重复。开启后，本插件也会把常驻条目读进候选范围。"></span>
+                <span>允许读取常驻条目</span>
             </label>
+
+            <div class="m-t-1">
+                <label for="ai_wbr_title_block_input"><span class="fa-solid fa-circle-info ai-wbr-help" title="按标题拦截世界书条目。输入一个标题关键词后点添加；命中的条目不会进入本插件的候选、AI 选择和注入。"></span>标题拦截规则</label>
+                <div class="ai-wbr-token-editor">
+                    <input id="ai_wbr_title_block_input" class="text_pole" type="text" placeholder="例如：TavernDB-ACU-WrapperEnd" />
+                    <button id="ai_wbr_title_block_add" class="menu_button" type="button">添加</button>
+                </div>
+                <div id="ai_wbr_title_block_items" class="ai-wbr-token-list"></div>
+            </div>
 
             <div class="ai-wbr-section">
                 <div class="ai-wbr-section-title">
