@@ -1,0 +1,12 @@
+{
+    "display_name": "世界书读取",
+    "loading_order": 95,
+    "requires": [],
+    "optional": [],
+    "generate_interceptor": "ai_worldbook_router_intercept",
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Codex",
+    "version": "0.1.0",
+    "homePage": "https://github.com/SillyTavern/SillyTavern"
+}

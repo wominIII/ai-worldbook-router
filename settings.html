@@ -1,0 +1,129 @@
+<div id="ai_worldbook_router_settings" class="ai-worldbook-router-settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>世界书读取</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <label class="checkbox_label" for="ai_wbr_enabled">
+                <input id="ai_wbr_enabled" type="checkbox" />
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="总开关。开启后会在正式生成前筛选本轮相关世界书并注入 prompt。"></span>
+                <span>启用前置 AI 世界书路由</span>
+            </label>
+            <label class="checkbox_label" for="ai_wbr_debug">
+                <input id="ai_wbr_debug" type="checkbox" />
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="在浏览器控制台和本面板显示候选、选择原因与注入长度，方便排查。"></span>
+                <span>调试模式</span>
+            </label>
+            <label class="checkbox_label" for="ai_wbr_keyword_recall">
+                <input id="ai_wbr_keyword_recall" type="checkbox" />
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="用最后用户消息、最近上下文和可选状态匹配世界书 keys，先缩小候选范围。推荐开启。"></span>
+                <span>启用关键词粗召回</span>
+            </label>
+            <label class="checkbox_label" for="ai_wbr_semantic_recall">
+                <input id="ai_wbr_semantic_recall" type="checkbox" />
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="预留给 embedding/vector 召回。当前 MVP 暂不执行语义检索。"></span>
+                <span>启用简单语义粗召回（MVP 暂不调用 embedding）</span>
+            </label>
+            <label class="checkbox_label" for="ai_wbr_use_mvu">
+                <input id="ai_wbr_use_mvu" type="checkbox" />
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="尝试读取 Tavern Helper / MVU 的 stat_data，并把地点、NPC、阶段等状态加入匹配与判断。读不到会静默跳过。"></span>
+                <span>读取 MVU/stat_data（可选兼容）</span>
+            </label>
+            <label class="checkbox_label" for="ai_wbr_allow_constant">
+                <input id="ai_wbr_allow_constant" type="checkbox" />
+                <span class="fa-solid fa-circle-info ai-wbr-help" title="默认跳过 constant 条目，避免和原生世界书常驻注入重复。只有确实需要重复考虑时再开启。"></span>
+                <span>允许重复路由 constant 条目</span>
+            </label>
+
+            <div class="ai-wbr-section">
+                <div class="ai-wbr-section-title">
+                    <b>独立路由模型</b>
+                </div>
+                <label class="checkbox_label" for="ai_wbr_router_use_separate_model">
+                    <input id="ai_wbr_router_use_separate_model" type="checkbox" />
+                    <span class="fa-solid fa-circle-info ai-wbr-help" title="开启后，前置 AI 精选不走当前主模型，而走下面单独配置的 OpenAI-compatible 接口。"></span>
+                    <span>启用独立模型</span>
+                </label>
+
+                <div class="ai-wbr-grid">
+                    <label for="ai_wbr_router_api_url"><span class="fa-solid fa-circle-info ai-wbr-help" title="独立路由模型的接口地址。通常填到 /v1，例如 http://127.0.0.1:8000/v1 。"></span>API URL</label>
+                    <input id="ai_wbr_router_api_url" class="text_pole" type="text" placeholder="https://example.com/v1" />
+
+                    <label for="ai_wbr_router_api_key"><span class="fa-solid fa-circle-info ai-wbr-help" title="用于拉取模型和执行前置 AI 选择的 API Key，仅保存在此插件设置里。"></span>API Key</label>
+                    <input id="ai_wbr_router_api_key" class="text_pole" type="password" placeholder="sk-..." />
+
+                    <label for="ai_wbr_router_model"><span class="fa-solid fa-circle-info ai-wbr-help" title="当前用于前置世界书精选的模型。先点“拉取模型”，再从下拉里选择。"></span>路由模型</label>
+                    <select id="ai_wbr_router_model" class="text_pole">
+                        <option value="">未选择</option>
+                    </select>
+                </div>
+
+                <div class="ai-wbr-actions">
+                    <button id="ai_wbr_fetch_models" class="menu_button">拉取模型</button>
+                    <span id="ai_wbr_router_status" class="ai-wbr-status">未连接</span>
+                </div>
+            </div>
+
+            <div class="ai-wbr-grid">
+                <label for="ai_wbr_max_candidates"><span class="fa-solid fa-circle-info ai-wbr-help" title="本插件先用本地规则从世界书里召回候选，再把候选交给前置 AI 精选。这里控制候选上限。"></span>最大候选条目数</label>
+                <input id="ai_wbr_max_candidates" class="text_pole" type="number" min="1" max="100" step="1" />
+
+                <label for="ai_wbr_max_selected"><span class="fa-solid fa-circle-info ai-wbr-help" title="前置 AI 或 fallback 最多选择多少条注入本轮 prompt。"></span>最终注入条目数</label>
+                <input id="ai_wbr_max_selected" class="text_pole" type="number" min="1" max="50" step="1" />
+
+                <label for="ai_wbr_max_chars"><span class="fa-solid fa-circle-info ai-wbr-help" title="最终世界书注入块的字符上限，防止条目过长挤占上下文。"></span>最大注入字符数</label>
+                <input id="ai_wbr_max_chars" class="text_pole" type="number" min="100" max="30000" step="100" />
+
+                <label for="ai_wbr_scan_messages"><span class="fa-solid fa-circle-info ai-wbr-help" title="用于关键词匹配和 AI 判断的最近聊天消息数量。剧情连续时可适当调高。"></span>扫描最近消息数</label>
+                <input id="ai_wbr_scan_messages" class="text_pole" type="number" min="1" max="50" step="1" />
+
+                <label for="ai_wbr_position"><span class="fa-solid fa-circle-info ai-wbr-help" title="控制筛选出的世界书块插入 prompt 的位置。通常推荐 In-chat 深度注入。"></span>注入位置</label>
+                <select id="ai_wbr_position" class="text_pole">
+                    <option value="1">In-chat 深度注入</option>
+                    <option value="0">故事字符串后</option>
+                    <option value="2">故事字符串前</option>
+                </select>
+
+                <label for="ai_wbr_depth"><span class="fa-solid fa-circle-info ai-wbr-help" title="In-chat 注入时距离最新消息的深度。数字越小通常越靠近最新上下文，影响越强。"></span>注入深度</label>
+                <input id="ai_wbr_depth" class="text_pole" type="number" min="0" max="1000" step="1" />
+
+                <label for="ai_wbr_role"><span class="fa-solid fa-circle-info ai-wbr-help" title="In-chat 注入使用的消息角色。一般推荐 system。"></span>In-chat 角色</label>
+                <select id="ai_wbr_role" class="text_pole">
+                    <option value="0">system</option>
+                    <option value="1">user</option>
+                    <option value="2">assistant</option>
+                </select>
+
+                <label for="ai_wbr_ai_response_length"><span class="fa-solid fa-circle-info ai-wbr-help" title="限制前置 AI 输出 JSON 的最大长度。这里只做插件侧保护，不强行卡死在 1024。候选很多或某些接口吞吐保守时可调高。"></span>AI 判定最大回复 tokens</label>
+                <input id="ai_wbr_ai_response_length" class="text_pole" type="number" min="32" max="16384" step="16" />
+
+                <label for="ai_wbr_router_retries"><span class="fa-solid fa-circle-info ai-wbr-help" title="当前置 AI 调用或 JSON 解析失败时，额外自动重试几次。重试时会抛出反转标记；全部失败时会抛出红色 × 并红光闪三下。"></span>前置 AI 重试次数</label>
+                <input id="ai_wbr_router_retries" class="text_pole" type="number" min="0" max="5" step="1" />
+            </div>
+
+            <div class="m-t-1">
+                <label for="ai_wbr_system_prompt"><span class="fa-solid fa-circle-info ai-wbr-help" title="约束前置 AI 如何选择条目以及必须输出严格 JSON。通常不用改。"></span>前置 AI 系统提示</label>
+                <textarea id="ai_wbr_system_prompt" class="text_pole textarea_compact ai-wbr-prompt" rows="5"></textarea>
+            </div>
+
+            <div class="ai-wbr-debug">
+                <div><b>最近一次选择</b></div>
+                <div id="ai_wbr_last_summary" class="menu_button disabled">尚无路由记录</div>
+                <div id="ai_wbr_last_items" class="ai-wbr-last-items"></div>
+                <div class="ai-wbr-router-raw-block">
+                    <div><b>本轮最终注入文本</b></div>
+                    <pre id="ai_wbr_injection_text" class="ai-wbr-router-raw">尚无本轮注入记录</pre>
+                </div>
+                <div class="ai-wbr-router-raw-block">
+                    <div><b>发给前置 AI 的 Prompt</b></div>
+                    <pre id="ai_wbr_router_prompt" class="ai-wbr-router-raw">尚无前置 AI Prompt 记录</pre>
+                </div>
+                <div class="ai-wbr-router-raw-block">
+                    <div><b>前置 AI 返回</b></div>
+                    <pre id="ai_wbr_router_raw" class="ai-wbr-router-raw">尚无前置 AI 返回记录</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
