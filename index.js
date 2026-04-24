@@ -23,6 +23,13 @@ const MAX_MVU_CHARS = 1600;
 const MAX_RECALL_TERMS = 32;
 const MAX_ROUTER_CONTEXT_PREVIEW = 360;
 const MAX_BURST_ITEMS = 5;
+const FETCH_FALLBACK_ENDPOINTS = [
+    '/api/backends/chat-completions/generate',
+    '/api/backends/text-completions/generate',
+    '/api/backends/kobold/generate',
+    '/api/novelai/generate',
+    '/api/horde/generate-text',
+];
 const COMMON_QUERY_TERMS = new Set([
     '如果', '有人', '这个', '那个', '这里', '那里', '什么', '怎么', '为何', '为什么', '然后',
     '可以', '是不是', '就是', '不是', '一下', '一下子', '这样', '那样', '会被', '会不会',
@@ -92,6 +99,9 @@ let compatHooksInstalled = false;
 let compatHookRetryTimer = null;
 let compatGenerateHookTimer = null;
 let isCompatRouterRunning = false;
+let isRouterSelectionRequest = false;
+let fetchFallbackInstalled = false;
+let lastRouteCompletedAt = 0;
 
 function beginRouterBusy() {
     if (routerBusyPromise) {
@@ -666,6 +676,184 @@ function shouldRouteTavernHelperGenerate(options) {
     }
 
     return !!getTavernHelperInput(options);
+}
+
+function getFetchUrl(input) {
+    if (typeof input === 'string') {
+        return input;
+    }
+
+    if (input instanceof URL) {
+        return input.pathname;
+    }
+
+    return String(input?.url || '');
+}
+
+function isMainGenerationFetch(input, init) {
+    if (isRouterSelectionRequest) {
+        return false;
+    }
+
+    const url = getFetchUrl(input);
+    if (!FETCH_FALLBACK_ENDPOINTS.some(endpoint => url.includes(endpoint))) {
+        return false;
+    }
+
+    const method = String(init?.method || input?.method || 'GET').toUpperCase();
+    return method === 'POST';
+}
+
+function contentToText(content) {
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    if (Array.isArray(content)) {
+        return content
+            .map(part => {
+                if (typeof part === 'string') {
+                    return part;
+                }
+
+                return part?.text || part?.content || '';
+            })
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    return content == null ? '' : String(content);
+}
+
+function getPayloadBody(init) {
+    return typeof init?.body === 'string' ? init.body : '';
+}
+
+function buildFetchFallbackMessages(context, payload) {
+    if (Array.isArray(payload?.messages) && payload.messages.length) {
+        return payload.messages
+            .map(message => ({
+                name: message.name || message.role || '',
+                text: contentToText(message.content),
+                isUser: message.role === 'user',
+            }))
+            .filter(message => message.text)
+            .slice(-settings.scanMessages);
+    }
+
+    const chat = Array.isArray(context?.chat) ? getRecentMessages(context.chat) : [];
+    if (chat.length) {
+        return chat;
+    }
+
+    if (typeof payload?.prompt === 'string' && payload.prompt.trim()) {
+        return [{
+            name: context?.name1 || 'User',
+            text: payload.prompt.trim(),
+            isUser: true,
+        }];
+    }
+
+    return [];
+}
+
+function injectIntoGenerationPayload(payload, injection) {
+    if (!injection) {
+        return false;
+    }
+
+    if (Array.isArray(payload.messages)) {
+        payload.messages.unshift({
+            role: 'system',
+            content: injection,
+        });
+        return true;
+    }
+
+    if (typeof payload.prompt === 'string') {
+        payload.prompt = `${injection}\n\n${payload.prompt}`;
+        return true;
+    }
+
+    return false;
+}
+
+function installFetchFallbackHook() {
+    if (fetchFallbackInstalled || typeof globalThis.fetch !== 'function') {
+        return;
+    }
+
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    const wrappedFetch = async function (input, init = undefined) {
+        if (!settings.enabled || !isMainGenerationFetch(input, init)) {
+            return originalFetch(input, init);
+        }
+
+        const body = getPayloadBody(init);
+        if (!body || body.includes('[本轮相关世界书]') || Date.now() - lastRouteCompletedAt < 3000) {
+            return originalFetch(input, init);
+        }
+
+        let payload;
+        try {
+            payload = JSON.parse(body);
+        } catch {
+            return originalFetch(input, init);
+        }
+
+        const endRouterBusy = beginRouterBusy();
+        clearEntryBurst();
+        startWorldInfoAnimation();
+
+        try {
+            const context = getContext();
+            const recentMessages = buildFetchFallbackMessages(context, payload);
+            if (!recentMessages.length) {
+                return originalFetch(input, init);
+            }
+
+            const result = await routeWorldbookForMessages(context, recentMessages, 'fetch_fallback', {
+                type: 'fetch',
+                url: getFetchUrl(input),
+            });
+
+            if (result.selected.length && !result.source.includes('fallback')) {
+                playSelectedEntriesBurst(result.selected);
+            }
+
+            if (!injectIntoGenerationPayload(payload, result.injection)) {
+                return originalFetch(input, init);
+            }
+
+            debugLog('Injected through fetch fallback', {
+                url: getFetchUrl(input),
+                selected: result.selected.length,
+                chars: result.injection.length,
+            });
+
+            return originalFetch(input, {
+                ...init,
+                body: JSON.stringify(payload),
+            });
+        } catch (error) {
+            debugError(error);
+            console.error(`${LOG_PREFIX} Fetch fallback failed`, error);
+            return originalFetch(input, init);
+        } finally {
+            stopWorldInfoAnimation();
+            endRouterBusy();
+        }
+    };
+
+    Object.defineProperty(wrappedFetch, '__aiWbrFetchWrapped', {
+        value: true,
+        configurable: false,
+        enumerable: false,
+        writable: false,
+    });
+
+    globalThis.fetch = wrappedFetch;
+    fetchFallbackInstalled = true;
 }
 
 function getLastUserMessage(recentMessages) {
@@ -1554,6 +1742,7 @@ async function routeWorldbookForMessages(context, recentMessages, routeSource = 
 
     if (candidates.length === 0) {
         debugRun([], [], '', `none-${routeSource}`);
+        lastRouteCompletedAt = Date.now();
         return {
             candidates,
             selected: [],
@@ -1567,6 +1756,7 @@ async function routeWorldbookForMessages(context, recentMessages, routeSource = 
     let routerRaw = '';
     let source = `ai-${routeSource}`;
     try {
+        isRouterSelectionRequest = true;
         const aiResult = await selectWithAi(context, recentMessages, mvuSummary, candidates);
         selected = aiResult.selected;
         routerPrompt = aiResult.prompt;
@@ -1577,6 +1767,8 @@ async function routeWorldbookForMessages(context, recentMessages, routeSource = 
         console.warn(`${LOG_PREFIX} AI selection failed; falling back to keyword score.`, error);
         routerPrompt = error?.routerPrompt || '';
         routerRaw = error?.routerRaw || error?.message || String(error);
+    } finally {
+        isRouterSelectionRequest = false;
     }
 
     if (!selected.length) {
@@ -1586,6 +1778,7 @@ async function routeWorldbookForMessages(context, recentMessages, routeSource = 
     const injection = buildInjection(selected);
     setExtensionPrompt(PROMPT_KEY, injection, settings.position, settings.depth, false, settings.role);
     debugRun(candidates, selected, injection, source, routerPrompt, routerRaw);
+    lastRouteCompletedAt = Date.now();
 
     return {
         candidates,
@@ -1877,11 +2070,13 @@ async function addSettingsUi() {
 }
 
 globalThis.ai_worldbook_router_intercept = interceptGeneration;
+installFetchFallbackHook();
 
 jQuery(async () => {
     try {
         ensureSettings();
         await addSettingsUi();
+        installFetchFallbackHook();
         installCompatSendHooks();
         ensureTavernHelperCompatHook();
         startCompatGenerateHookPolling();
