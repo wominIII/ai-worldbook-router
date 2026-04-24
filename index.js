@@ -473,6 +473,12 @@ function normalizeText(value) {
     return String(value ?? '').toLowerCase();
 }
 
+function extractActualUserInput(value) {
+    const text = String(value ?? '');
+    const match = text.match(/<本轮用户输入>\s*([\s\S]*?)\s*<\/本轮用户输入>/i);
+    return (match ? match[1] : text).trim();
+}
+
 function escapeRegex(value) {
     return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -615,7 +621,7 @@ function getRecentMessages(chat) {
         .slice(-settings.scanMessages)
         .map(message => ({
             name: message.name || '',
-            text: String(message.mes || ''),
+            text: message.is_user ? extractActualUserInput(message.mes) : String(message.mes || ''),
             isUser: !!message.is_user,
         }));
 }
@@ -635,13 +641,13 @@ function getTavernHelperInput(options) {
         || options.prompt
         || options.message
         || ''
-    ).trim();
+    );
 }
 
 function buildCompatRecentMessages(context, options) {
     const chat = Array.isArray(context?.chat) ? context.chat : [];
     const recentMessages = getRecentMessages(chat);
-    const input = getTavernHelperInput(options);
+    const input = extractActualUserInput(getTavernHelperInput(options));
 
     if (!input) {
         return recentMessages;
@@ -675,7 +681,7 @@ function shouldRouteTavernHelperGenerate(options) {
         return false;
     }
 
-    return !!getTavernHelperInput(options);
+    return !!extractActualUserInput(getTavernHelperInput(options));
 }
 
 function getFetchUrl(input) {
@@ -734,7 +740,7 @@ function buildFetchFallbackMessages(context, payload) {
         return payload.messages
             .map(message => ({
                 name: message.name || message.role || '',
-                text: contentToText(message.content),
+                text: message.role === 'user' ? extractActualUserInput(contentToText(message.content)) : contentToText(message.content),
                 isUser: message.role === 'user',
             }))
             .filter(message => message.text)
@@ -749,7 +755,7 @@ function buildFetchFallbackMessages(context, payload) {
     if (typeof payload?.prompt === 'string' && payload.prompt.trim()) {
         return [{
             name: context?.name1 || 'User',
-            text: payload.prompt.trim(),
+            text: extractActualUserInput(payload.prompt),
             isUser: true,
         }];
     }
@@ -857,9 +863,10 @@ function installFetchFallbackHook() {
 }
 
 function getLastUserMessage(recentMessages) {
-    return [...recentMessages].reverse().find(message => message.isUser)?.text
+    const text = [...recentMessages].reverse().find(message => message.isUser)?.text
         || recentMessages.at(-1)?.text
         || '';
+    return extractActualUserInput(text);
 }
 
 function summarizeMvuValue(value) {
@@ -1148,11 +1155,14 @@ function recallCandidates(entries, recentMessages, mvuSummary) {
         .map(entry => {
             const { score, matchedKeys, matchedSignals } = scoreEntry(entry, matchText, lastUserMessage, recentText);
             return { ...entry, score, matchedKeys, matchedSignals };
-        })
-        .filter(entry => !settings.keywordRecall || entry.score > 0);
+        });
 
     return candidates
-        .sort((a, b) => (b.score - a.score) || (b.order - a.order))
+        .sort((a, b) => {
+            const aMatched = a.score > 0 ? 1 : 0;
+            const bMatched = b.score > 0 ? 1 : 0;
+            return (bMatched - aMatched) || (b.score - a.score) || (b.order - a.order);
+        })
         .slice(0, settings.maxCandidates);
 }
 
