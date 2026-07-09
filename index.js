@@ -5807,7 +5807,13 @@ function createFloatingMemoryWindow() {
         toggleWindow();
     });
 
-    $('#ai_wbr_floating_close').on('click', toggleWindow);
+    $('#ai_wbr_floating_close').on('pointerdown click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (win.hasClass('open')) {
+            animateFloatingWindow(false);
+        }
+    });
 
     // ESC 关闭
     $(document).on('keydown', (event) => {

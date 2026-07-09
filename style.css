@@ -105,7 +105,7 @@
 
 .ai-wbr-floating-header {
     position: absolute;
-    z-index: 6;
+    z-index: 12;
     top: 0;
     left: 0;
     right: 0;
@@ -147,6 +147,8 @@
 }
 
 .ai-wbr-floating-close {
+    position: relative;
+    z-index: 13;
     cursor: pointer;
     opacity: 0.82;
     transition: opacity 0.2s, transform 0.2s;
@@ -158,6 +160,7 @@
     border: 1px solid rgba(255, 255, 255, 0.13);
     border-radius: 999px;
     background: rgba(12, 16, 28, 0.56);
+    touch-action: manipulation;
 }
 
 .ai-wbr-floating-close:hover {
@@ -220,6 +223,12 @@
 
     .ai-wbr-floating-header {
         padding: 0.7rem 0.72rem 2.1rem;
+    }
+
+    .ai-wbr-floating-close {
+        width: 2.75rem;
+        height: 2.75rem;
+        font-size: 1.05rem;
     }
 
     .ai-wbr-floating-title {
