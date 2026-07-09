@@ -631,6 +631,7 @@
 
 .ai-wbr-memory-node {
     cursor: pointer;
+    touch-action: none;
     --memory-node-accent: #66e0ff;
     --memory-node-accent-soft: rgba(102, 224, 255, 0.18);
 }

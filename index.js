@@ -933,6 +933,14 @@ function getSvgSafeId(value) {
         .replace(/^([^a-zA-Z_])/, '_$1');
 }
 
+function getPointerEventId(event) {
+    return event?.pointerId ?? event?.originalEvent?.pointerId;
+}
+
+function getPointerEventType(event) {
+    return event?.pointerType ?? event?.originalEvent?.pointerType;
+}
+
 function uniqueStrings(values) {
     return [...new Set(values.filter(Boolean).map(value => String(value)))];
 }
@@ -4420,7 +4428,12 @@ function bindMemoryGraphSvgInteractions() {
         renderMemoryGraphSvg(graph);
     });
 
-    container.on('mousedown.memoryGraphSvg', '.ai-wbr-memory-node', function (event) {
+    container.on('pointerdown.memoryGraphSvg', '.ai-wbr-memory-node', function (event) {
+        const pointerType = getPointerEventType(event);
+        const pointerId = getPointerEventId(event);
+        if (pointerType === 'mouse' && event.button !== 0) {
+            return;
+        }
         const nodeId = String($(this).data('memoryNodeId'));
         const start = getMemoryGraphSvgPoint(svg, event.clientX, event.clientY);
         const graph = getMemoryGraph();
@@ -4468,8 +4481,12 @@ function bindMemoryGraphSvgInteractions() {
             moved: false,
             nodePositions,
             linkOffsets,
-            links: edges.filter(link => link.source === nodeId || link.target === nodeId)
+            links: edges.filter(link => link.source === nodeId || link.target === nodeId),
+            pointerId,
         };
+        if (pointerId !== undefined) {
+            svg.setPointerCapture?.(pointerId);
+        }
         event.preventDefault();
         event.stopPropagation();
     });
@@ -4481,13 +4498,18 @@ function bindMemoryGraphSvgInteractions() {
         showMemoryLinkPopover(String($(this).data('memoryLinkId') || ''), event.clientX, event.clientY);
     });
 
-    container.on('mousedown.memoryGraphSvg', '.ai-wbr-memory-edge, .ai-wbr-memory-edge-hit', function (event) {
+    container.on('pointerdown.memoryGraphSvg', '.ai-wbr-memory-edge, .ai-wbr-memory-edge-hit', function (event) {
         event.preventDefault();
         event.stopPropagation();
     });
 
-    container.on('mousedown.memoryGraphSvg', 'svg', function (event) {
-        if ($(event.target).closest('.ai-wbr-memory-node').length) {
+    container.on('pointerdown.memoryGraphSvg', 'svg', function (event) {
+        const pointerType = getPointerEventType(event);
+        const pointerId = getPointerEventId(event);
+        if (pointerType === 'mouse' && event.button !== 0) {
+            return;
+        }
+        if ($(event.target).closest('.ai-wbr-memory-node, .ai-wbr-memory-edge, .ai-wbr-memory-edge-hit').length) {
             return;
         }
 
@@ -4497,15 +4519,24 @@ function bindMemoryGraphSvgInteractions() {
             viewX: memoryGraphView.x,
             viewY: memoryGraphView.y,
             moved: false,
+            pointerId,
         };
         $('#ai_wbr_memory_node_popover').hide();
+        $('#ai_wbr_memory_link_popover').hide();
         $(svg).addClass('ai-wbr-memory-panning');
+        if (pointerId !== undefined) {
+            svg.setPointerCapture?.(pointerId);
+        }
         event.preventDefault();
     });
 
-    $(document).on('mousemove.memoryGraphSvg', (event) => {
+    $(document).on('pointermove.memoryGraphSvg', (event) => {
+        const pointerId = getPointerEventId(event);
         if (!memoryGraphDrag) {
             if (memoryGraphPan) {
+                if (memoryGraphPan.pointerId !== undefined && pointerId !== memoryGraphPan.pointerId) {
+                    return;
+                }
                 const rect = svg.getBoundingClientRect();
                 const dx = (event.clientX - memoryGraphPan.startClientX) * (memoryGraphView.width / Math.max(1, rect.width));
                 const dy = (event.clientY - memoryGraphPan.startClientY) * (memoryGraphView.height / Math.max(1, rect.height));
@@ -4516,6 +4547,9 @@ function bindMemoryGraphSvgInteractions() {
                 memoryGraphView.y = memoryGraphPan.viewY - dy;
                 updateMemoryGraphViewBox(svg);
             }
+            return;
+        }
+        if (memoryGraphDrag.pointerId !== undefined && pointerId !== memoryGraphDrag.pointerId) {
             return;
         }
         const point = getMemoryGraphSvgPoint(svg, event.clientX, event.clientY);
@@ -4542,8 +4576,15 @@ function bindMemoryGraphSvgInteractions() {
         });
     });
 
-    $(document).on('mouseup.memoryGraphSvg', (event) => {
+    $(document).on('pointerup.memoryGraphSvg pointercancel.memoryGraphSvg', (event) => {
+        const pointerId = getPointerEventId(event);
         if (memoryGraphPan) {
+            if (memoryGraphPan.pointerId !== undefined && pointerId !== memoryGraphPan.pointerId) {
+                return;
+            }
+            if (pointerId !== undefined) {
+                svg.releasePointerCapture?.(pointerId);
+            }
             memoryGraphPan = null;
             $(svg).removeClass('ai-wbr-memory-panning');
             lastObservedChatScopedUiSignature = getChatScopedUiSignature();
@@ -4554,7 +4595,13 @@ function bindMemoryGraphSvgInteractions() {
             return;
         }
         const drag = memoryGraphDrag;
+        if (drag.pointerId !== undefined && pointerId !== drag.pointerId) {
+            return;
+        }
         memoryGraphDrag = null;
+        if (pointerId !== undefined) {
+            svg.releasePointerCapture?.(pointerId);
+        }
         const graph = getMemoryGraph();
 
         if (drag.moved) {
@@ -5807,12 +5854,10 @@ function createFloatingMemoryWindow() {
         toggleWindow();
     });
 
-    $('#ai_wbr_floating_close').on('pointerdown click', (event) => {
+    $('#ai_wbr_floating_close').on('touchstart pointerdown click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (win.hasClass('open')) {
-            animateFloatingWindow(false);
-        }
+        animateFloatingWindow(false);
     });
 
     // ESC 关闭
