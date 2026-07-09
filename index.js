@@ -4281,7 +4281,7 @@ function createLinkTypeSelect(fieldAttrName, currentValue, extraData = {}) {
 
 function showMemoryNodePopover(nodeId, clientX, clientY) {
     memoryGraphSelectedNodeId = String(nodeId || '');
-    renderMemoryPanel();
+    renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true });
     $('#ai_wbr_memory_link_popover').hide();
 
     const graph = getMemoryGraph();
@@ -4322,7 +4322,7 @@ function showMemoryNodePopover(nodeId, clientX, clientY) {
 
 function showMemoryLinkPopover(linkId, clientX, clientY) {
     memoryGraphSelectedLinkId = String(linkId || '');
-    renderMemoryPanel();
+    renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true });
 
     const graph = getMemoryGraph();
     const link = graph.links.find(item => String(item.id) === String(linkId));
@@ -4554,26 +4554,28 @@ function bindMemoryGraphSvgInteractions() {
         const drag = memoryGraphDrag;
         memoryGraphDrag = null;
         const graph = getMemoryGraph();
-        const node = graph.nodes.find(item => item.id === drag.nodeId);
-        if (node) {
-            const point = getMemoryGraphSvgPoint(svg, event.clientX, event.clientY);
-            const dx = point.x - drag.startX;
-            const dy = point.y - drag.startY;
-            const clamped = clampMemoryNodePositionToView(drag.nodeX + dx, drag.nodeY + dy);
-            node.x = clamped.x;
-            node.y = clamped.y;
-            node.updatedAt = new Date().toISOString();
-        }
-        graph.updatedAt = new Date().toISOString();
-        saveMemoryGraph(graph, getContext(), true);
-        lastObservedChatScopedUiSignature = getChatScopedUiSignature();
 
-        if (!drag.moved) {
-            showMemoryNodePopover(drag.nodeId, event.clientX, event.clientY);
-        } else {
+        if (drag.moved) {
+            const node = graph.nodes.find(item => item.id === drag.nodeId);
+            if (node) {
+                const point = getMemoryGraphSvgPoint(svg, event.clientX, event.clientY);
+                const dx = point.x - drag.startX;
+                const dy = point.y - drag.startY;
+                const clamped = clampMemoryNodePositionToView(drag.nodeX + dx, drag.nodeY + dy);
+                node.x = clamped.x;
+                node.y = clamped.y;
+                node.updatedAt = new Date().toISOString();
+            }
+            graph.updatedAt = new Date().toISOString();
+            saveMemoryGraph(graph, getContext(), true);
+            lastObservedChatScopedUiSignature = getChatScopedUiSignature();
             $('#ai_wbr_memory_json').val(JSON.stringify(graph, null, 2));
             renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+            return;
         }
+
+        lastObservedChatScopedUiSignature = getChatScopedUiSignature();
+        showMemoryNodePopover(drag.nodeId, event.clientX, event.clientY);
     });
 
     $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_node_popover .ai-wbr-memory-popover-save', function () {
@@ -4588,14 +4590,16 @@ function bindMemoryGraphSvgInteractions() {
             node[field] = String($(this).val() || '');
         });
         node.updatedAt = new Date().toISOString();
-        saveMemoryGraph(graph);
+        graph.updatedAt = node.updatedAt;
+        saveMemoryGraph(graph, getContext(), true);
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
         popover.hide();
     });
 
     $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_node_popover .ai-wbr-memory-set-link-source', function () {
         const nodeId = String($('#ai_wbr_memory_node_popover').data('memoryNodeId'));
         memoryGraphLinkSourceId = nodeId;
-        renderMemoryGraphSvg(getMemoryGraph());
+        renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true });
     });
 
     $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_node_popover .ai-wbr-memory-link-to-source', function () {
@@ -4608,7 +4612,8 @@ function bindMemoryGraphSvgInteractions() {
         if (existingIndex >= 0) {
             graph.links.splice(existingIndex, 1);
             graph.updatedAt = new Date().toISOString();
-            saveMemoryGraph(graph);
+            saveMemoryGraph(graph, getContext(), true);
+            renderMemoryGraphSvg(graph, { skipAutoArrange: true });
             memoryGraphLinkSourceId = '';
             $('#ai_wbr_memory_node_popover').hide();
             return;
@@ -4623,7 +4628,8 @@ function bindMemoryGraphSvgInteractions() {
         if (link && !graph.links.some(item => item.source === link.source && item.target === link.target && item.type === link.type)) {
             graph.links.push(link);
             graph.updatedAt = new Date().toISOString();
-            saveMemoryGraph(graph);
+            saveMemoryGraph(graph, getContext(), true);
+            renderMemoryGraphSvg(graph, { skipAutoArrange: true });
         }
         memoryGraphLinkSourceId = '';
         $('#ai_wbr_memory_node_popover').hide();
@@ -4634,7 +4640,9 @@ function bindMemoryGraphSvgInteractions() {
         const nodeId = String($('#ai_wbr_memory_node_popover').data('memoryNodeId'));
         graph.nodes = graph.nodes.filter(node => node.id !== nodeId);
         graph.links = graph.links.filter(link => link.source !== nodeId && link.target !== nodeId);
-        saveMemoryGraph(graph);
+        graph.updatedAt = new Date().toISOString();
+        saveMemoryGraph(graph, getContext(), true);
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
         $('#ai_wbr_memory_node_popover').hide();
     });
 
@@ -4655,7 +4663,8 @@ function bindMemoryGraphSvgInteractions() {
         });
         link.updatedAt = new Date().toISOString();
         graph.updatedAt = link.updatedAt;
-        saveMemoryGraph(graph);
+        saveMemoryGraph(graph, getContext(), true);
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
         popover.hide();
     });
 
@@ -4668,7 +4677,8 @@ function bindMemoryGraphSvgInteractions() {
             memoryGraphSelectedLinkId = '';
         }
         graph.updatedAt = new Date().toISOString();
-        saveMemoryGraph(graph);
+        saveMemoryGraph(graph, getContext(), true);
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
         popover.hide();
     });
 
