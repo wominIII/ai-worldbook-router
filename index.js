@@ -913,7 +913,7 @@ function truncateTextByDisplayWidth(value, maxWidth) {
     return result;
 }
 
-function hashString(value) {
+function hashMemoryGraphColorKey(value) {
     const text = String(value ?? '');
     let hash = 0;
     for (let i = 0; i < text.length; i += 1) {
@@ -923,7 +923,8 @@ function hashString(value) {
 }
 
 function getMemoryNodeColor(node, index = 0) {
-    return MEMORY_GRAPH_NODE_COLORS[(hashString(node?.id || node?.title || index) + index) % MEMORY_GRAPH_NODE_COLORS.length];
+    const colorIndex = (hashMemoryGraphColorKey(node?.id || node?.title || index) + index) % MEMORY_GRAPH_NODE_COLORS.length;
+    return MEMORY_GRAPH_NODE_COLORS[colorIndex] || MEMORY_GRAPH_NODE_COLORS[0];
 }
 
 function getSvgSafeId(value) {
