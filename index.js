@@ -5677,11 +5677,17 @@ function createFloatingMemoryWindow() {
 
     const fab = $('<div id="ai_wbr_fab" class="ai-wbr-fab" title="打开记忆图谱"><i class="fa-solid fa-circle-chevron-down"></i></div>');
     const win = $('<div id="ai_wbr_floating_window" class="ai-wbr-floating-window">' +
-        '<div class="ai-wbr-floating-header" id="ai_wbr_floating_header">' +
-            '<div class="ai-wbr-floating-title"><i class="fa-solid fa-network-wired"></i> 记忆图谱</div>' +
-            '<div class="ai-wbr-floating-close" id="ai_wbr_floating_close"><i class="fa-solid fa-times"></i></div>' +
+        '<div class="ai-wbr-floating-card-face ai-wbr-floating-back">' +
+            '<div class="ai-wbr-floating-back-mark">AIWBR</div>' +
+            '<div class="ai-wbr-floating-back-title">Memory Graph</div>' +
         '</div>' +
-        '<div class="ai-wbr-floating-content" id="ai_wbr_floating_content"></div>' +
+        '<div class="ai-wbr-floating-card-face ai-wbr-floating-front">' +
+            '<div class="ai-wbr-floating-header" id="ai_wbr_floating_header">' +
+                '<div class="ai-wbr-floating-title"><i class="fa-solid fa-network-wired"></i> 记忆图谱</div>' +
+                '<div class="ai-wbr-floating-close" id="ai_wbr_floating_close"><i class="fa-solid fa-times"></i></div>' +
+            '</div>' +
+            '<div class="ai-wbr-floating-content" id="ai_wbr_floating_content"></div>' +
+        '</div>' +
     '</div>');
 
     $('body').append(fab).append(win);
@@ -5691,17 +5697,65 @@ function createFloatingMemoryWindow() {
         graph.appendTo('#ai_wbr_floating_content');
     }
 
+    let windowAnimation = null;
+    let windowAnimationId = 0;
+
+    function animateFloatingWindow(open) {
+        const el = win[0];
+        const animationId = ++windowAnimationId;
+        windowAnimation?.cancel?.();
+        if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || !el.animate) {
+            win.toggleClass('open', open).removeClass('closing').css({ visibility: open ? 'visible' : '', opacity: '', transform: '', filter: '' });
+            return;
+        }
+        const timing = {
+            duration: open ? 620 : 460,
+            easing: open ? 'cubic-bezier(0.16, 1, 0.3, 1)' : 'cubic-bezier(0.7, 0, 0.84, 0)',
+            fill: 'forwards',
+        };
+        const hiddenFrame = {
+            opacity: 0,
+            transform: 'perspective(1200px) rotateY(180deg) rotateX(7deg) scale(0.86) translateZ(-72px)',
+            filter: 'blur(3px) saturate(0.82)',
+        };
+        const backFrame = {
+            opacity: 0.96,
+            transform: 'perspective(1200px) rotateY(178deg) rotateX(3deg) scale(0.94) translateZ(-22px)',
+            filter: 'blur(0.5px) saturate(0.9)',
+        };
+        const frontFrame = {
+            opacity: 1,
+            transform: 'perspective(1200px) rotateY(0deg) rotateX(0deg) scale(1) translateZ(0)',
+            filter: 'blur(0) saturate(1)',
+        };
+        if (open) {
+            win.css('visibility', 'visible').removeClass('closing').addClass('open');
+            windowAnimation = el.animate([hiddenFrame, backFrame, frontFrame], timing);
+            windowAnimation.finished.catch(() => { }).then(() => {
+                if (animationId === windowAnimationId && win.hasClass('open')) {
+                    win.css({ opacity: '', transform: '', filter: '' });
+                }
+            });
+            return;
+        }
+
+        win.removeClass('open').addClass('closing').css('visibility', 'visible');
+        windowAnimation = el.animate([frontFrame, backFrame, hiddenFrame], timing);
+        windowAnimation.finished.catch(() => { }).then(() => {
+            if (animationId === windowAnimationId && win.hasClass('closing')) {
+                win.removeClass('closing').css({ visibility: '', opacity: '', transform: '', filter: '' });
+            }
+        });
+    }
+
     function toggleWindow() {
         const isOpen = win.hasClass('open');
         if (isOpen) {
-            win.removeClass('open').addClass('closing');
-            setTimeout(() => {
-                win.removeClass('closing');
-            }, 220);
+            animateFloatingWindow(false);
         } else {
-            win.removeClass('closing').addClass('open');
+            animateFloatingWindow(true);
             renderMemoryPanel();
-            setTimeout(renderMemoryPanel, 340);
+            setTimeout(renderMemoryPanel, 640);
         }
     }
 
