@@ -5727,7 +5727,6 @@ function createFloatingMemoryWindow() {
         '<div class="ai-wbr-floating-card-face ai-wbr-floating-front">' +
             '<div class="ai-wbr-floating-header" id="ai_wbr_floating_header">' +
                 '<div class="ai-wbr-floating-title"><i class="fa-solid fa-network-wired"></i> 记忆图谱</div>' +
-                '<div class="ai-wbr-floating-close" id="ai_wbr_floating_close"><i class="fa-solid fa-times"></i></div>' +
             '</div>' +
             '<div class="ai-wbr-floating-content" id="ai_wbr_floating_content"></div>' +
         '</div>' +
@@ -5854,9 +5853,14 @@ function createFloatingMemoryWindow() {
         toggleWindow();
     });
 
-    $('#ai_wbr_floating_close').on('touchstart pointerdown click', (event) => {
-        event.preventDefault();
+    win.on('pointerdown touchstart click', (event) => {
         event.stopPropagation();
+    });
+
+    $(document).on('pointerdown.aiWbrFloatingClose touchstart.aiWbrFloatingClose', (event) => {
+        if (!win.hasClass('open') || $(event.target).closest('#ai_wbr_floating_window, #ai_wbr_fab').length) {
+            return;
+        }
         animateFloatingWindow(false);
     });
 
@@ -5874,7 +5878,6 @@ function createFloatingMemoryWindow() {
     const header = $('#ai_wbr_floating_header');
 
     header.on('mousedown', (e) => {
-        if ($(e.target).closest('#ai_wbr_floating_close').length) return; // 排除关闭按钮
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
