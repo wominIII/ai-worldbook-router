@@ -70,7 +70,7 @@
     display: block;
     overflow: hidden;
     opacity: 0;
-    transform: perspective(1200px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.94);
+    transform: perspective(1200px) translate3d(44px, 54px, -120px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.74);
     transform-style: preserve-3d;
     transform-origin: 50% 50%;
     visibility: hidden;
@@ -80,7 +80,7 @@
 .ai-wbr-floating-window.open {
     visibility: visible;
     opacity: 1;
-    transform: perspective(1200px) rotate3d(0.18, 1, -0.08, 0deg) scale(1);
+    transform: perspective(1200px) translate3d(0, 0, 0) rotate3d(0.18, 1, -0.08, 0deg) scale(1);
 }
 
 .ai-wbr-floating-window.closing {

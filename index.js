@@ -5714,23 +5714,28 @@ function createFloatingMemoryWindow() {
             fill: 'forwards',
         };
         const backFrame = {
+            opacity: 0,
+            transform: 'perspective(1200px) translate3d(44px, 54px, -120px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.74)',
+            filter: 'saturate(0.82)',
+        };
+        const revealBackFrame = {
             opacity: 0.96,
-            transform: 'perspective(1200px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.94)',
-            filter: 'saturate(0.92)',
+            transform: 'perspective(1200px) translate3d(0, 0, -30px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.94)',
+            filter: 'saturate(0.9)',
         };
         const turnFrame = {
             opacity: 0.96,
-            transform: 'perspective(1200px) rotate3d(0.18, 1, -0.08, 92deg) scale(0.98)',
+            transform: 'perspective(1200px) translate3d(0, 0, -10px) rotate3d(0.18, 1, -0.08, 92deg) scale(0.98)',
             filter: 'saturate(0.96)',
         };
         const frontFrame = {
             opacity: 1,
-            transform: 'perspective(1200px) rotate3d(0.18, 1, -0.08, 0deg) scale(1)',
+            transform: 'perspective(1200px) translate3d(0, 0, 0) rotate3d(0.18, 1, -0.08, 0deg) scale(1)',
             filter: 'saturate(1)',
         };
         if (open) {
             win.css('visibility', 'visible').removeClass('closing').addClass('open');
-            windowAnimation = el.animate([backFrame, turnFrame, frontFrame], timing);
+            windowAnimation = el.animate([backFrame, revealBackFrame, turnFrame, frontFrame], timing);
             windowAnimation.finished.catch(() => { }).then(() => {
                 if (animationId === windowAnimationId && win.hasClass('open')) {
                     win.css({ opacity: '', transform: '', filter: '' });
@@ -5740,7 +5745,7 @@ function createFloatingMemoryWindow() {
         }
 
         win.removeClass('open').addClass('closing').css('visibility', 'visible');
-        windowAnimation = el.animate([frontFrame, turnFrame, backFrame], timing);
+        windowAnimation = el.animate([frontFrame, turnFrame, revealBackFrame, backFrame], timing);
         windowAnimation.finished.catch(() => { }).then(() => {
             if (animationId === windowAnimationId && win.hasClass('closing')) {
                 win.removeClass('closing').css({ visibility: '', opacity: '', transform: '', filter: '' });
