@@ -30,6 +30,8 @@ const MEMORY_GRAPH_CANVAS_WIDTH = 760;
 const MEMORY_GRAPH_CANVAS_HEIGHT = 340;
 const MEMORY_GRAPH_NODE_WIDTH = 172;
 const MEMORY_GRAPH_NODE_HEIGHT = 82;
+const MEMORY_GRAPH_NODE_HORIZONTAL_GAP = 36;
+const MEMORY_GRAPH_NODE_VERTICAL_GAP = 28;
 const MEMORY_GRAPH_SAFE_PADDING = 12;
 const MEMORY_GRAPH_TOP_SAFE_PADDING = 56;
 const MEMORY_NODE_TYPE_OPTIONS = [
@@ -3826,6 +3828,64 @@ function escapeCssSelector(value) {
     return text.replace(/["\\]/g, '\\$&');
 }
 
+function doMemoryNodesOverlap(a, b, gap = 18) {
+    return Math.abs((Number(a.x || 0) + (MEMORY_GRAPH_NODE_WIDTH / 2)) - (Number(b.x || 0) + (MEMORY_GRAPH_NODE_WIDTH / 2))) < MEMORY_GRAPH_NODE_WIDTH + gap
+        && Math.abs((Number(a.y || 0) + (MEMORY_GRAPH_NODE_HEIGHT / 2)) - (Number(b.y || 0) + (MEMORY_GRAPH_NODE_HEIGHT / 2))) < MEMORY_GRAPH_NODE_HEIGHT + gap;
+}
+
+function shouldAutoArrangeMemoryNodes(nodes) {
+    for (let i = 0; i < nodes.length; i += 1) {
+        const a = nodes[i];
+        if (!Number.isFinite(Number(a.x)) || !Number.isFinite(Number(a.y))) {
+            return true;
+        }
+        for (let j = i + 1; j < nodes.length; j += 1) {
+            if (doMemoryNodesOverlap(a, nodes[j])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function getMemoryGraphArrangeMetrics(nodeCount, canvasWidth = MEMORY_GRAPH_CANVAS_WIDTH) {
+    const cellWidth = MEMORY_GRAPH_NODE_WIDTH + MEMORY_GRAPH_NODE_HORIZONTAL_GAP;
+    const cellHeight = MEMORY_GRAPH_NODE_HEIGHT + MEMORY_GRAPH_NODE_VERTICAL_GAP;
+    const columns = Math.max(1, Math.floor((canvasWidth - (MEMORY_GRAPH_SAFE_PADDING * 2)) / cellWidth));
+    const rows = Math.max(1, Math.ceil(Math.max(1, nodeCount) / columns));
+    const requiredHeight = MEMORY_GRAPH_TOP_SAFE_PADDING
+        + (rows * MEMORY_GRAPH_NODE_HEIGHT)
+        + ((rows - 1) * MEMORY_GRAPH_NODE_VERTICAL_GAP)
+        + MEMORY_GRAPH_SAFE_PADDING;
+    return { cellWidth, cellHeight, columns, rows, requiredHeight };
+}
+
+function arrangeMemoryGraphNodes(nodes, canvasWidth = MEMORY_GRAPH_CANVAS_WIDTH, canvasHeight = MEMORY_GRAPH_CANVAS_HEIGHT) {
+    if (!Array.isArray(nodes) || !nodes.length) {
+        return false;
+    }
+
+    const { cellWidth, cellHeight, columns, rows } = getMemoryGraphArrangeMetrics(nodes.length, canvasWidth);
+    const usedWidth = Math.min(canvasWidth - (MEMORY_GRAPH_SAFE_PADDING * 2), (Math.min(columns, nodes.length) * cellWidth) - MEMORY_GRAPH_NODE_HORIZONTAL_GAP);
+    const usedHeight = Math.min(canvasHeight - MEMORY_GRAPH_TOP_SAFE_PADDING - MEMORY_GRAPH_SAFE_PADDING, (rows * cellHeight) - MEMORY_GRAPH_NODE_VERTICAL_GAP);
+    const startX = Math.max(MEMORY_GRAPH_SAFE_PADDING, (canvasWidth - usedWidth) / 2);
+    const startY = Math.max(MEMORY_GRAPH_TOP_SAFE_PADDING, (canvasHeight - usedHeight) / 2);
+
+    nodes.forEach((node, index) => {
+        const row = Math.floor(index / columns);
+        const column = index % columns;
+        const clamped = clampMemoryNodePosition(
+            startX + (column * cellWidth),
+            startY + (row * cellHeight),
+            canvasWidth,
+            canvasHeight,
+        );
+        node.x = clamped.x;
+        node.y = clamped.y;
+    });
+    return true;
+}
+
 function renderMemoryGraphSvg(graph) {
     const container = $('#ai_wbr_memory_graph');
     if (!container.length) {
@@ -3840,12 +3900,17 @@ function renderMemoryGraphSvg(graph) {
 
     const viewport = getMemoryGraphViewportMetrics(container[0]);
     const width = MEMORY_GRAPH_CANVAS_WIDTH;
-    const height = viewport.baseHeight;
+    const height = Math.max(viewport.baseHeight, getMemoryGraphArrangeMetrics(nodes.length, width).requiredHeight);
     const centerX = width / 2;
     const centerY = height / 2;
     const radius = Math.min(134, 50 + nodes.length * 9);
     const positions = new Map();
     let layoutChanged = false;
+
+    if (shouldAutoArrangeMemoryNodes(nodes)) {
+        layoutChanged = arrangeMemoryGraphNodes(nodes, width, height);
+    }
+
     nodes.forEach((node, index) => {
         if (Number.isFinite(Number(node.x)) && Number.isFinite(Number(node.y))) {
             node.x = Number(node.x);
@@ -3931,12 +3996,17 @@ function renderMemoryGraphSvg(graph) {
         memoryGraphView = { x: 0, y: 0, width, height };
     }
     syncMemoryGraphViewToContainerAspect(container[0]);
+    if (memoryGraphView.height < height) {
+        memoryGraphView.y = Math.min(memoryGraphView.y, 0);
+        memoryGraphView.height = height;
+    }
 
     container.html(`
         <div class="ai-wbr-memory-graph-toolbar">
             <button class="menu_button ai-wbr-memory-zoom-in" type="button">＋</button>
             <button class="menu_button ai-wbr-memory-zoom-out" type="button">－</button>
             <button class="menu_button ai-wbr-memory-zoom-reset" type="button">重置视图</button>
+            <button class="menu_button ai-wbr-memory-arrange" type="button">重排</button>
             <span class="ai-wbr-memory-link-hint">${memoryGraphLinkSourceId ? `连线起点：${escapeHtml(graph.nodes.find(node => node.id === memoryGraphLinkSourceId)?.title || memoryGraphLinkSourceId)}` : ''}</span>
         </div>
         <svg viewBox="${memoryGraphView.x} ${memoryGraphView.y} ${memoryGraphView.width} ${memoryGraphView.height}" preserveAspectRatio="none" role="img" aria-label="记忆图谱">${lines}${cards}</svg>
@@ -4223,6 +4293,20 @@ function bindMemoryGraphSvgInteractions() {
         const viewport = getMemoryGraphViewportMetrics(container[0]);
         memoryGraphView = { x: 0, y: 0, width: viewport.baseWidth, height: viewport.baseHeight };
         updateMemoryGraphViewBox(svg);
+    });
+
+    container.on('click.memoryGraphSvg', '.ai-wbr-memory-arrange', () => {
+        const graph = getMemoryGraph();
+        const viewport = getMemoryGraphViewportMetrics(container[0]);
+        const visibleNodes = graph.nodes.slice(0, 18);
+        const nextHeight = Math.max(viewport.baseHeight, getMemoryGraphArrangeMetrics(visibleNodes.length).requiredHeight);
+        if (!arrangeMemoryGraphNodes(visibleNodes, MEMORY_GRAPH_CANVAS_WIDTH, nextHeight)) {
+            return;
+        }
+        graph.updatedAt = new Date().toISOString();
+        saveMemoryGraph(graph, getContext(), true);
+        memoryGraphView = { x: 0, y: 0, width: viewport.baseWidth, height: nextHeight };
+        renderMemoryGraphSvg(graph);
     });
 
     container.on('mousedown.memoryGraphSvg', '.ai-wbr-memory-node', function (event) {
