@@ -70,9 +70,9 @@
     display: block;
     overflow: hidden;
     opacity: 0;
-    transform: perspective(1200px) translate3d(44px, 54px, -120px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.74);
+    transform: translate3d(44px, 54px, 0) scale(0.62);
     transform-style: preserve-3d;
-    transform-origin: 50% 50%;
+    transform-origin: 92% 92%;
     visibility: hidden;
     will-change: transform, opacity, filter;
 }
@@ -80,7 +80,7 @@
 .ai-wbr-floating-window.open {
     visibility: visible;
     opacity: 1;
-    transform: perspective(1200px) translate3d(0, 0, 0) rotate3d(0.18, 1, -0.08, 0deg) scale(1);
+    transform: translate3d(0, 0, 0) scale(1);
 }
 
 .ai-wbr-floating-window.closing {
@@ -101,54 +101,6 @@
 
 .ai-wbr-floating-front {
     transform: rotateY(0deg) translateZ(1px);
-}
-
-.ai-wbr-floating-back {
-    align-items: center;
-    justify-content: center;
-    gap: 0.7rem;
-    transform: rotateY(180deg) translateZ(1px);
-    background:
-        radial-gradient(circle at 50% 35%, rgba(166, 113, 255, 0.28), transparent 32%),
-        linear-gradient(135deg, rgba(10, 14, 28, 0.98), rgba(34, 18, 61, 0.96));
-    color: rgba(242, 246, 255, 0.94);
-}
-
-.ai-wbr-floating-back::before {
-    content: '';
-    position: absolute;
-    inset: 1rem;
-    border: 1px solid rgba(222, 231, 255, 0.18);
-    border-radius: 1rem;
-    background:
-        linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-    background-size: 28px 28px;
-    opacity: 0.42;
-}
-
-.ai-wbr-floating-back-mark {
-    position: relative;
-    z-index: 1;
-    width: 6.4rem;
-    height: 6.4rem;
-    border-radius: 1.4rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(232, 221, 255, 0.28);
-    background: rgba(255, 255, 255, 0.06);
-    font-weight: 800;
-    letter-spacing: 0.13em;
-}
-
-.ai-wbr-floating-back-title {
-    position: relative;
-    z-index: 1;
-    font-size: 0.82rem;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    opacity: 0.72;
 }
 
 .ai-wbr-floating-header {
