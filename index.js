@@ -5433,7 +5433,6 @@ function createFloatingMemoryWindow() {
     }
 
     const fab = $('<div id="ai_wbr_fab" class="ai-wbr-fab" title="打开记忆图谱"><i class="fa-solid fa-circle-chevron-down"></i></div>');
-    // 注意：局部变量命名为 win，避免遮蔽全局 window 对象（拖拽时需要用 window.innerWidth/innerHeight 取视口尺寸）
     const win = $('<div id="ai_wbr_floating_window" class="ai-wbr-floating-window">' +
         '<div class="ai-wbr-floating-header" id="ai_wbr_floating_header">' +
             '<div class="ai-wbr-floating-title"><i class="fa-solid fa-network-wired"></i> 记忆图谱</div>' +
@@ -5444,53 +5443,48 @@ function createFloatingMemoryWindow() {
 
     $('body').append(fab).append(win);
 
-    // DOM move: 把整个记忆 section 移入悬浮窗内容区，保留所有 #ai_wbr_memory_* id 与事件绑定
-    const memorySection = $('#ai_wbr_memory_section');
-    if (memorySection.length) {
-        memorySection.appendTo('#ai_wbr_floating_content');
+    const graph = $('#ai_wbr_memory_graph');
+    if (graph.length) {
+        graph.appendTo('#ai_wbr_floating_content');
     }
 
-    // 切换悬浮窗显隐
     function toggleWindow() {
         const isOpen = win.hasClass('open');
         if (isOpen) {
             win.removeClass('open').addClass('closing');
             setTimeout(() => {
                 win.removeClass('closing');
-            }, 220); // 与 CSS 关闭动画时长一致
+            }, 220);
         } else {
             win.removeClass('closing').addClass('open');
-            // 打开后重新渲染记忆面板，让 SVG 适配悬浮窗容器尺寸
             renderMemoryPanel();
-            // 动画结束后再渲染一次，确保 SVG 取到动画终态的准确尺寸
             setTimeout(renderMemoryPanel, 340);
         }
     }
 
-    // FAB 拖拽（区分点击与拖拽：移动超过 4px 视为拖拽，松手不触发开窗）
     let fabDragging = false;
     let fabMoved = false;
     let fabStartX = 0, fabStartY = 0, fabInitialLeft = 0, fabInitialTop = 0;
 
-    fab.on('mousedown', (e) => {
-        if (e.button !== 0) return; // 仅左键
+    fab.on('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
         fabDragging = true;
         fabMoved = false;
         fabStartX = e.clientX;
         fabStartY = e.clientY;
-        // 把 right/bottom 定位转换为 left/top，便于拖拽
         const rect = fab[0].getBoundingClientRect();
         fabInitialLeft = rect.left;
         fabInitialTop = rect.top;
         fab.css({ right: 'auto', bottom: 'auto', left: fabInitialLeft + 'px', top: fabInitialTop + 'px' });
+        fab[0].setPointerCapture?.(e.pointerId);
         $('body').css('user-select', 'none');
     });
 
-    $(document).on('mousemove.fabDrag', (e) => {
+    $(document).on('pointermove.fabDrag', (e) => {
         if (!fabDragging) return;
         const dx = e.clientX - fabStartX;
         const dy = e.clientY - fabStartY;
-        if (!fabMoved && Math.hypot(dx, dy) < 4) return; // 阈值内仍视为点击
+        if (!fabMoved && Math.hypot(dx, dy) < 4) return;
         fabMoved = true;
         const rect = fab[0].getBoundingClientRect();
         const maxLeft = Math.max(0, window.innerWidth - rect.width);
@@ -5498,11 +5492,13 @@ function createFloatingMemoryWindow() {
         const newLeft = Math.max(0, Math.min(fabInitialLeft + dx, maxLeft));
         const newTop = Math.max(0, Math.min(fabInitialTop + dy, maxTop));
         fab.css({ left: newLeft + 'px', top: newTop + 'px' });
+        e.preventDefault();
     });
 
-    $(document).on('mouseup.fabDrag', () => {
+    $(document).on('pointerup.fabDrag pointercancel.fabDrag', (e) => {
         if (fabDragging) {
             fabDragging = false;
+            fab[0].releasePointerCapture?.(e.pointerId);
             $('body').css('user-select', '');
         }
     });

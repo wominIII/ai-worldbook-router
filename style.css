@@ -19,6 +19,8 @@
     font-size: 1.4rem;
     z-index: 28000;
     cursor: pointer;
+    touch-action: none;
+    user-select: none;
     backdrop-filter: blur(8px);
     transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.25, 1.15), box-shadow 0.25s ease, opacity 0.3s ease;
     opacity: 0;
@@ -156,6 +158,12 @@
     padding: 1rem;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.ai-wbr-floating-content .ai-wbr-memory-graph {
+    height: 100%;
+    min-height: 18rem;
+    margin-top: 0;
 }
 
 .ai-wbr-floating-content::-webkit-scrollbar {
