@@ -605,12 +605,9 @@
 
 .ai-wbr-memory-edge {
     fill: none;
-    stroke-width: 3.1;
+    stroke-width: 2.7;
     stroke-linecap: round;
     stroke-linejoin: round;
-    filter:
-        drop-shadow(0 0 4px rgba(80, 180, 255, 0.18))
-        drop-shadow(0 0 10px rgba(177, 134, 255, 0.12));
     cursor: pointer;
     pointer-events: stroke;
 }
@@ -625,10 +622,7 @@
 
 .ai-wbr-memory-edge:hover,
 .ai-wbr-memory-edge-selected {
-    stroke-width: 4.6;
-    filter:
-        drop-shadow(0 0 8px rgba(255, 255, 255, 0.34))
-        drop-shadow(0 0 18px rgba(97, 221, 255, 0.26));
+    stroke-width: 3.6;
 }
 
 .ai-wbr-memory-node {
@@ -641,23 +635,18 @@
     fill: rgba(13, 19, 35, 0.82);
     stroke: color-mix(in srgb, var(--memory-node-accent) 62%, rgba(255, 255, 255, 0.22) 38%);
     stroke-width: 1.35;
-    filter:
-        drop-shadow(0 14px 24px rgba(0, 0, 0, 0.32))
-        drop-shadow(0 0 11px color-mix(in srgb, var(--memory-node-accent) 22%, transparent 78%));
+    filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.24));
 }
 
 .ai-wbr-memory-node:hover .ai-wbr-memory-node-card {
     fill: rgba(19, 27, 48, 0.92);
     stroke: rgba(255, 255, 255, 0.96);
     stroke-width: 1.85;
-    filter:
-        drop-shadow(0 18px 30px rgba(0, 0, 0, 0.38))
-        drop-shadow(0 0 18px color-mix(in srgb, var(--memory-node-accent) 36%, transparent 64%));
+    filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.3));
 }
 
 .ai-wbr-memory-node .ai-wbr-memory-node-accent {
     fill: var(--memory-node-accent);
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--memory-node-accent) 55%, transparent 45%));
 }
 
 .ai-wbr-memory-node-location {

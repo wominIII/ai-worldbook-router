@@ -3927,7 +3927,7 @@ function arrangeMemoryGraphNodes(nodes, canvasWidth = MEMORY_GRAPH_CANVAS_WIDTH,
     return true;
 }
 
-function renderMemoryGraphSvg(graph) {
+function renderMemoryGraphSvg(graph, options = {}) {
     const container = $('#ai_wbr_memory_graph');
     if (!container.length) {
         return;
@@ -3948,7 +3948,7 @@ function renderMemoryGraphSvg(graph) {
     const positions = new Map();
     let layoutChanged = false;
 
-    if (shouldAutoArrangeMemoryNodes(nodes)) {
+    if (!options.skipAutoArrange && shouldAutoArrangeMemoryNodes(nodes)) {
         layoutChanged = arrangeMemoryGraphNodes(nodes, width, height);
     }
 
@@ -4021,8 +4021,8 @@ function renderMemoryGraphSvg(graph) {
                 <stop offset="52%" stop-color="${escapeHtml(sourceColor)}"></stop>
                 <stop offset="100%" stop-color="${escapeHtml(targetColor)}"></stop>
             </linearGradient>
-            <marker id="${markerId}" markerWidth="10" markerHeight="10" refX="8.5" refY="5" orient="auto" markerUnits="strokeWidth">
-                <path d="M 1 1 L 9 5 L 1 9 z" fill="${escapeHtml(targetColor)}"></path>
+            <marker id="${markerId}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+                <path d="M 1 1 L 7 4 L 1 7" fill="none" stroke="${escapeHtml(targetColor)}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
             </marker>
         `);
         return `
@@ -4572,7 +4572,7 @@ function bindMemoryGraphSvgInteractions() {
             showMemoryNodePopover(drag.nodeId, event.clientX, event.clientY);
         } else {
             $('#ai_wbr_memory_json').val(JSON.stringify(graph, null, 2));
-            renderMemoryGraphSvg(graph);
+            renderMemoryGraphSvg(graph, { skipAutoArrange: true });
         }
     });
 
