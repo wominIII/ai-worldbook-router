@@ -4055,8 +4055,10 @@ function renderMemoryGraphSvg(graph, options = {}) {
     if (!memoryGraphView || !Number.isFinite(memoryGraphView.width)) {
         memoryGraphView = { x: 0, y: 0, width, height };
     }
-    syncMemoryGraphViewToContainerAspect(container[0]);
-    if (memoryGraphView.height < height) {
+    if (!options.preserveView) {
+        syncMemoryGraphViewToContainerAspect(container[0]);
+    }
+    if (!options.preserveView && memoryGraphView.height < height) {
         memoryGraphView.y = Math.min(memoryGraphView.y, 0);
         memoryGraphView.height = height;
     }
@@ -4281,7 +4283,7 @@ function createLinkTypeSelect(fieldAttrName, currentValue, extraData = {}) {
 
 function showMemoryNodePopover(nodeId, clientX, clientY) {
     memoryGraphSelectedNodeId = String(nodeId || '');
-    renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true });
+    renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true, preserveView: true });
     $('#ai_wbr_memory_link_popover').hide();
 
     const graph = getMemoryGraph();
@@ -4322,7 +4324,7 @@ function showMemoryNodePopover(nodeId, clientX, clientY) {
 
 function showMemoryLinkPopover(linkId, clientX, clientY) {
     memoryGraphSelectedLinkId = String(linkId || '');
-    renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true });
+    renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true, preserveView: true });
 
     const graph = getMemoryGraph();
     const link = graph.links.find(item => String(item.id) === String(linkId));
@@ -4570,7 +4572,7 @@ function bindMemoryGraphSvgInteractions() {
             saveMemoryGraph(graph, getContext(), true);
             lastObservedChatScopedUiSignature = getChatScopedUiSignature();
             $('#ai_wbr_memory_json').val(JSON.stringify(graph, null, 2));
-            renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+            renderMemoryGraphSvg(graph, { skipAutoArrange: true, preserveView: true });
             return;
         }
 
@@ -4592,14 +4594,14 @@ function bindMemoryGraphSvgInteractions() {
         node.updatedAt = new Date().toISOString();
         graph.updatedAt = node.updatedAt;
         saveMemoryGraph(graph, getContext(), true);
-        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true, preserveView: true });
         popover.hide();
     });
 
     $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_node_popover .ai-wbr-memory-set-link-source', function () {
         const nodeId = String($('#ai_wbr_memory_node_popover').data('memoryNodeId'));
         memoryGraphLinkSourceId = nodeId;
-        renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true });
+        renderMemoryGraphSvg(getMemoryGraph(), { skipAutoArrange: true, preserveView: true });
     });
 
     $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_node_popover .ai-wbr-memory-link-to-source', function () {
@@ -4613,7 +4615,7 @@ function bindMemoryGraphSvgInteractions() {
             graph.links.splice(existingIndex, 1);
             graph.updatedAt = new Date().toISOString();
             saveMemoryGraph(graph, getContext(), true);
-            renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+            renderMemoryGraphSvg(graph, { skipAutoArrange: true, preserveView: true });
             memoryGraphLinkSourceId = '';
             $('#ai_wbr_memory_node_popover').hide();
             return;
@@ -4629,7 +4631,7 @@ function bindMemoryGraphSvgInteractions() {
             graph.links.push(link);
             graph.updatedAt = new Date().toISOString();
             saveMemoryGraph(graph, getContext(), true);
-            renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+            renderMemoryGraphSvg(graph, { skipAutoArrange: true, preserveView: true });
         }
         memoryGraphLinkSourceId = '';
         $('#ai_wbr_memory_node_popover').hide();
@@ -4642,7 +4644,7 @@ function bindMemoryGraphSvgInteractions() {
         graph.links = graph.links.filter(link => link.source !== nodeId && link.target !== nodeId);
         graph.updatedAt = new Date().toISOString();
         saveMemoryGraph(graph, getContext(), true);
-        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true, preserveView: true });
         $('#ai_wbr_memory_node_popover').hide();
     });
 
@@ -4664,7 +4666,7 @@ function bindMemoryGraphSvgInteractions() {
         link.updatedAt = new Date().toISOString();
         graph.updatedAt = link.updatedAt;
         saveMemoryGraph(graph, getContext(), true);
-        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true, preserveView: true });
         popover.hide();
     });
 
@@ -4678,7 +4680,7 @@ function bindMemoryGraphSvgInteractions() {
         }
         graph.updatedAt = new Date().toISOString();
         saveMemoryGraph(graph, getContext(), true);
-        renderMemoryGraphSvg(graph, { skipAutoArrange: true });
+        renderMemoryGraphSvg(graph, { skipAutoArrange: true, preserveView: true });
         popover.hide();
     });
 
