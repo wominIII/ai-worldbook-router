@@ -5709,28 +5709,28 @@ function createFloatingMemoryWindow() {
             return;
         }
         const timing = {
-            duration: open ? 620 : 460,
-            easing: open ? 'cubic-bezier(0.16, 1, 0.3, 1)' : 'cubic-bezier(0.7, 0, 0.84, 0)',
+            duration: open ? 520 : 380,
+            easing: open ? 'cubic-bezier(0.2, 0.85, 0.18, 1)' : 'cubic-bezier(0.72, 0, 0.84, 0.32)',
             fill: 'forwards',
-        };
-        const hiddenFrame = {
-            opacity: 0,
-            transform: 'perspective(1200px) rotateY(180deg) rotateX(7deg) scale(0.86) translateZ(-72px)',
-            filter: 'blur(3px) saturate(0.82)',
         };
         const backFrame = {
             opacity: 0.96,
-            transform: 'perspective(1200px) rotateY(178deg) rotateX(3deg) scale(0.94) translateZ(-22px)',
-            filter: 'blur(0.5px) saturate(0.9)',
+            transform: 'perspective(1200px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.94)',
+            filter: 'saturate(0.92)',
+        };
+        const turnFrame = {
+            opacity: 0.96,
+            transform: 'perspective(1200px) rotate3d(0.18, 1, -0.08, 92deg) scale(0.98)',
+            filter: 'saturate(0.96)',
         };
         const frontFrame = {
             opacity: 1,
-            transform: 'perspective(1200px) rotateY(0deg) rotateX(0deg) scale(1) translateZ(0)',
-            filter: 'blur(0) saturate(1)',
+            transform: 'perspective(1200px) rotate3d(0.18, 1, -0.08, 0deg) scale(1)',
+            filter: 'saturate(1)',
         };
         if (open) {
             win.css('visibility', 'visible').removeClass('closing').addClass('open');
-            windowAnimation = el.animate([hiddenFrame, backFrame, frontFrame], timing);
+            windowAnimation = el.animate([backFrame, turnFrame, frontFrame], timing);
             windowAnimation.finished.catch(() => { }).then(() => {
                 if (animationId === windowAnimationId && win.hasClass('open')) {
                     win.css({ opacity: '', transform: '', filter: '' });
@@ -5740,7 +5740,7 @@ function createFloatingMemoryWindow() {
         }
 
         win.removeClass('open').addClass('closing').css('visibility', 'visible');
-        windowAnimation = el.animate([frontFrame, backFrame, hiddenFrame], timing);
+        windowAnimation = el.animate([frontFrame, turnFrame, backFrame], timing);
         windowAnimation.finished.catch(() => { }).then(() => {
             if (animationId === windowAnimationId && win.hasClass('closing')) {
                 win.removeClass('closing').css({ visibility: '', opacity: '', transform: '', filter: '' });

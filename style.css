@@ -70,7 +70,7 @@
     display: block;
     overflow: hidden;
     opacity: 0;
-    transform: perspective(1200px) rotateY(180deg) rotateX(7deg) scale(0.86) translateZ(-72px);
+    transform: perspective(1200px) rotate3d(0.18, 1, -0.08, 180deg) scale(0.94);
     transform-style: preserve-3d;
     transform-origin: 50% 50%;
     visibility: hidden;
@@ -80,7 +80,7 @@
 .ai-wbr-floating-window.open {
     visibility: visible;
     opacity: 1;
-    transform: perspective(1200px) rotateY(0deg) rotateX(0deg) scale(1) translateZ(0);
+    transform: perspective(1200px) rotate3d(0.18, 1, -0.08, 0deg) scale(1);
 }
 
 .ai-wbr-floating-window.closing {
@@ -258,12 +258,12 @@
     }
 
     .ai-wbr-floating-window {
-        width: 100vw;
-        height: 100dvh;
-        bottom: 0;
-        right: 0;
-        border-radius: 0;
-        border: none;
+        width: calc(100vw - 1.5rem);
+        height: min(76dvh, 32rem);
+        bottom: 4.85rem;
+        right: 0.75rem;
+        border-radius: 1.1rem;
+        border: 1px solid rgba(205, 224, 255, 0.24);
     }
 
     .ai-wbr-floating-header {
