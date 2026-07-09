@@ -605,11 +605,12 @@
 
 .ai-wbr-memory-edge {
     fill: none;
-    stroke: rgba(104, 208, 255, 0.7);
-    stroke-width: 2.45;
+    stroke-width: 3.1;
     stroke-linecap: round;
     stroke-linejoin: round;
-    filter: drop-shadow(0 0 5px rgba(80, 180, 255, 0.2));
+    filter:
+        drop-shadow(0 0 4px rgba(80, 180, 255, 0.18))
+        drop-shadow(0 0 10px rgba(177, 134, 255, 0.12));
     cursor: pointer;
     pointer-events: stroke;
 }
@@ -624,11 +625,10 @@
 
 .ai-wbr-memory-edge:hover,
 .ai-wbr-memory-edge-selected {
-    stroke: rgba(230, 215, 255, 0.98);
-    stroke-width: 4.2;
+    stroke-width: 4.6;
     filter:
-        drop-shadow(0 0 7px rgba(177, 134, 255, 0.44))
-        drop-shadow(0 0 16px rgba(97, 221, 255, 0.2));
+        drop-shadow(0 0 8px rgba(255, 255, 255, 0.34))
+        drop-shadow(0 0 18px rgba(97, 221, 255, 0.26));
 }
 
 .ai-wbr-memory-node {
@@ -761,6 +761,14 @@
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
         0 0 24px rgba(125, 201, 255, 0.14);
     backdrop-filter: blur(14px) saturate(1.12);
+}
+
+.ai-wbr-memory-link-popover {
+    width: min(15.5rem, calc(100% - 1rem));
+}
+
+.ai-wbr-memory-link-popover .ai-wbr-memory-popover-title {
+    color: rgba(232, 244, 255, 0.96);
 }
 
 .ai-wbr-memory-node-popover label {

@@ -34,6 +34,10 @@ const MEMORY_GRAPH_NODE_HORIZONTAL_GAP = 36;
 const MEMORY_GRAPH_NODE_VERTICAL_GAP = 28;
 const MEMORY_GRAPH_SAFE_PADDING = 12;
 const MEMORY_GRAPH_TOP_SAFE_PADDING = 56;
+const MEMORY_GRAPH_NODE_COLORS = [
+    '#54d6ff', '#4ff0b4', '#ffc15f', '#c29cff', '#ffe06e', '#ff96bd',
+    '#80a7ff', '#f48cff', '#8ff5e8', '#ff8f70', '#b6f36b', '#a98cff',
+];
 const MEMORY_NODE_TYPE_OPTIONS = [
     { value: 'event', label: '事件' },
     { value: 'character', label: '角色' },
@@ -890,6 +894,42 @@ function truncateText(value, maxLength) {
     }
 
     return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function truncateTextByDisplayWidth(value, maxWidth) {
+    const text = String(value ?? '').trim();
+    let width = 0;
+    let result = '';
+
+    for (const char of text) {
+        const charWidth = /[\u1100-\u115f\u2e80-\u9fff\uf900-\ufaff\uff01-\uff60\uffe0-\uffe6]/u.test(char) ? 2 : 1;
+        if (width + charWidth > Math.max(0, maxWidth - 1)) {
+            return `${result}…`;
+        }
+        width += charWidth;
+        result += char;
+    }
+
+    return result;
+}
+
+function hashString(value) {
+    const text = String(value ?? '');
+    let hash = 0;
+    for (let i = 0; i < text.length; i += 1) {
+        hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash);
+}
+
+function getMemoryNodeColor(node, index = 0) {
+    return MEMORY_GRAPH_NODE_COLORS[(hashString(node?.id || node?.title || index) + index) % MEMORY_GRAPH_NODE_COLORS.length];
+}
+
+function getSvgSafeId(value) {
+    return String(value ?? '')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/^([^a-zA-Z_])/, '_$1');
 }
 
 function uniqueStrings(values) {
@@ -3943,6 +3983,7 @@ function renderMemoryGraphSvg(graph) {
     }
 
     const visibleIds = new Set(nodes.map(node => node.id));
+    const nodeColors = new Map(nodes.map((node, index) => [node.id, getMemoryNodeColor(node, index)]));
     const edges = graph.links.filter(link => visibleIds.has(link.source) && visibleIds.has(link.target)).slice(-32);
     const pairBuckets = new Map();
     edges.forEach((link) => {
@@ -3952,6 +3993,7 @@ function renderMemoryGraphSvg(graph) {
         }
         pairBuckets.get(pairKey).push(link);
     });
+    const edgeDefs = [];
     const lines = edges.map(link => {
         const source = positions.get(link.source);
         const target = positions.get(link.target);
@@ -3965,25 +4007,42 @@ function renderMemoryGraphSvg(graph) {
         const siblingIndex = siblings.findIndex(item => String(item.id || '') === String(link.id || ''));
         const offsetIndex = siblingIndex - ((siblings.length - 1) / 2);
         const laneOffset = siblings.length > 1 ? offsetIndex * 18 : 0;
-        const path = buildMemoryEdgePath(source, target, laneOffset);
+        const geometry = buildMemoryEdgeGeometry(source, target, laneOffset);
+        const sourceColor = nodeColors.get(link.source) || MEMORY_GRAPH_NODE_COLORS[0];
+        const targetColor = nodeColors.get(link.target) || MEMORY_GRAPH_NODE_COLORS[1];
         const linkId = escapeHtml(String(link.id || ''));
+        const safeId = getSvgSafeId(`${link.id || ''}_${link.source}_${link.target}_${siblingIndex}`);
+        const gradientId = `ai_wbr_memory_edge_gradient_${safeId}`;
+        const markerId = `ai_wbr_memory_edge_arrow_${safeId}`;
+        edgeDefs.push(`
+            <linearGradient id="${gradientId}" gradientUnits="userSpaceOnUse" x1="${geometry.startX}" y1="${geometry.startY}" x2="${geometry.endX}" y2="${geometry.endY}">
+                <stop offset="0%" stop-color="${escapeHtml(sourceColor)}"></stop>
+                <stop offset="52%" stop-color="${escapeHtml(sourceColor)}"></stop>
+                <stop offset="100%" stop-color="${escapeHtml(targetColor)}"></stop>
+            </linearGradient>
+            <marker id="${markerId}" markerWidth="10" markerHeight="10" refX="8.5" refY="5" orient="auto" markerUnits="strokeWidth">
+                <path d="M 1 1 L 9 5 L 1 9 z" fill="${escapeHtml(targetColor)}"></path>
+            </marker>
+        `);
         return `
-            <path d="${path}" class="ai-wbr-memory-edge-hit" data-memory-link-id="${linkId}" data-source-id="${escapeHtml(link.source)}" data-target-id="${escapeHtml(link.target)}"></path>
-            <path d="${path}" class="ai-wbr-memory-edge${selectedClass}" data-memory-link-id="${linkId}" data-source-id="${escapeHtml(link.source)}" data-target-id="${escapeHtml(link.target)}" style="opacity:${opacity}"><title>${escapeHtml(link.type || 'RELATED')}</title></path>
+            <path d="${geometry.path}" class="ai-wbr-memory-edge-hit" data-memory-link-id="${linkId}" data-source-id="${escapeHtml(link.source)}" data-target-id="${escapeHtml(link.target)}"></path>
+            <path d="${geometry.path}" class="ai-wbr-memory-edge${selectedClass}" data-memory-link-id="${linkId}" data-source-id="${escapeHtml(link.source)}" data-target-id="${escapeHtml(link.target)}" style="opacity:${opacity};stroke:url(#${gradientId});marker-end:url(#${markerId});"><title>${escapeHtml(link.type || 'RELATED')}</title></path>
         `;
     }).join('');
+    const defs = edgeDefs.length ? `<defs>${edgeDefs.join('')}</defs>` : '';
 
-    const cards = nodes.map(node => {
+    const cards = nodes.map((node, index) => {
         const position = positions.get(node.id);
         const rawType = String(node.type || 'event');
         const colorClass = `ai-wbr-memory-node-${escapeHtml(rawType.toLowerCase())}`;
         const typeLabel = getOptionLabel(MEMORY_NODE_TYPE_OPTIONS, rawType, rawType);
         const subtitle = node.summary || node.content || '';
-        return `<g class="ai-wbr-memory-node ${colorClass}" data-memory-node-id="${escapeHtml(node.id)}" transform="translate(${position.x},${position.y})">
+        const nodeColor = nodeColors.get(node.id) || getMemoryNodeColor(node, index);
+        return `<g class="ai-wbr-memory-node ${colorClass}" data-memory-node-id="${escapeHtml(node.id)}" style="--memory-node-accent:${escapeHtml(nodeColor)}" transform="translate(${position.x},${position.y})">
             <rect class="ai-wbr-memory-node-card" x="0" y="0" width="${MEMORY_GRAPH_NODE_WIDTH}" height="${MEMORY_GRAPH_NODE_HEIGHT}" rx="14" ry="14"></rect>
             <circle class="ai-wbr-memory-node-accent" cx="16" cy="16" r="4"></circle>
-            <text class="ai-wbr-memory-node-title" x="28" y="21">${escapeHtml(truncateText(node.title || node.id, 20))}</text>
-            <text class="ai-wbr-memory-node-subtitle" x="14" y="42">${escapeHtml(truncateText(subtitle, 32) || '暂无摘要')}</text>
+            <text class="ai-wbr-memory-node-title" x="28" y="21">${escapeHtml(truncateTextByDisplayWidth(node.title || node.id, 18))}</text>
+            <text class="ai-wbr-memory-node-subtitle" x="14" y="42">${escapeHtml(truncateTextByDisplayWidth(subtitle, 24) || '暂无摘要')}</text>
             <g class="ai-wbr-memory-node-badge" transform="translate(12,56)">
                 <rect width="${Math.max(34, typeLabel.length * 12)}" height="18" rx="9" ry="9"></rect>
                 <text x="${Math.max(34, typeLabel.length * 12) / 2}" y="12">${escapeHtml(typeLabel)}</text>
@@ -4009,7 +4068,7 @@ function renderMemoryGraphSvg(graph) {
             <button class="menu_button ai-wbr-memory-arrange" type="button">重排</button>
             <span class="ai-wbr-memory-link-hint">${memoryGraphLinkSourceId ? `连线起点：${escapeHtml(graph.nodes.find(node => node.id === memoryGraphLinkSourceId)?.title || memoryGraphLinkSourceId)}` : ''}</span>
         </div>
-        <svg viewBox="${memoryGraphView.x} ${memoryGraphView.y} ${memoryGraphView.width} ${memoryGraphView.height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="记忆图谱">${lines}${cards}</svg>
+        <svg viewBox="${memoryGraphView.x} ${memoryGraphView.y} ${memoryGraphView.width} ${memoryGraphView.height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="记忆图谱">${defs}${lines}${cards}</svg>
     `);
     bindMemoryGraphSvgInteractions();
 }
@@ -4105,6 +4164,10 @@ function getMemoryNodeRect(position) {
 }
 
 function buildMemoryEdgePath(sourcePosition, targetPosition, laneOffset = 0) {
+    return buildMemoryEdgeGeometry(sourcePosition, targetPosition, laneOffset).path;
+}
+
+function buildMemoryEdgeGeometry(sourcePosition, targetPosition, laneOffset = 0) {
     const sourceRect = getMemoryNodeRect(sourcePosition);
     const targetRect = getMemoryNodeRect(targetPosition);
     const sourceCenter = {
@@ -4156,7 +4219,13 @@ function buildMemoryEdgePath(sourcePosition, targetPosition, laneOffset = 0) {
         endX += laneOffset * 0.35;
     }
 
-    return `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`;
+    return {
+        path: `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`,
+        startX,
+        startY,
+        endX,
+        endY,
+    };
 }
 
 function buildSelectOptionsHtml(options, currentValue) {
@@ -4212,6 +4281,7 @@ function createLinkTypeSelect(fieldAttrName, currentValue, extraData = {}) {
 function showMemoryNodePopover(nodeId, clientX, clientY) {
     memoryGraphSelectedNodeId = String(nodeId || '');
     renderMemoryPanel();
+    $('#ai_wbr_memory_link_popover').hide();
 
     const graph = getMemoryGraph();
     const node = graph.nodes.find(item => item.id === nodeId);
@@ -4245,6 +4315,44 @@ function showMemoryNodePopover(nodeId, clientX, clientY) {
         .css({
             left: `${Math.min(Math.max(clientX + 12, 8), window.innerWidth - 244)}px`,
             top: `${Math.min(Math.max(clientY + 12, 8), window.innerHeight - 210)}px`,
+        })
+        .show();
+}
+
+function showMemoryLinkPopover(linkId, clientX, clientY) {
+    memoryGraphSelectedLinkId = String(linkId || '');
+    renderMemoryPanel();
+
+    const graph = getMemoryGraph();
+    const link = graph.links.find(item => String(item.id) === String(linkId));
+    let popover = $('#ai_wbr_memory_link_popover');
+    if (!popover.length) {
+        popover = $('<div id="ai_wbr_memory_link_popover" class="ai-wbr-memory-node-popover ai-wbr-memory-link-popover"></div>');
+        $('body').append(popover);
+    }
+    if (!link || !popover.length) {
+        return;
+    }
+
+    const sourceTitle = graph.nodes.find(node => node.id === link.source)?.title || link.source;
+    const targetTitle = graph.nodes.find(node => node.id === link.target)?.title || link.target;
+
+    popover
+        .attr('data-memory-link-id', link.id)
+        .data('memoryLinkId', link.id)
+        .html(`
+            <div class="ai-wbr-memory-popover-title">${escapeHtml(truncateTextByDisplayWidth(sourceTitle, 16))} → ${escapeHtml(truncateTextByDisplayWidth(targetTitle, 16))}</div>
+            <label>关系类型${buildLinkTypeSelect('popover-link-field', link.type || 'RELATED')}</label>
+            <label>权重<input class="text_pole" type="number" min="0" max="1" step="0.05" data-popover-link-field="weight" value="${escapeHtml(link.weight ?? 0.7)}" /></label>
+            <label>说明<textarea class="text_pole" rows="2" data-popover-link-field="description">${escapeHtml(link.description || '')}</textarea></label>
+            <div class="ai-wbr-memory-popover-actions">
+                <button class="menu_button ai-wbr-memory-link-popover-save" type="button">保存</button>
+                <button class="menu_button ai-wbr-memory-link-popover-delete" type="button">删除连接</button>
+            </div>
+        `)
+        .css({
+            left: `${Math.min(Math.max(clientX + 12, 8), window.innerWidth - 260)}px`,
+            top: `${Math.min(Math.max(clientY + 12, 8), window.innerHeight - 230)}px`,
         })
         .show();
 }
@@ -4366,8 +4474,8 @@ function bindMemoryGraphSvgInteractions() {
     container.on('click.memoryGraphSvg', '.ai-wbr-memory-edge, .ai-wbr-memory-edge-hit', function (event) {
         event.preventDefault();
         event.stopPropagation();
-        memoryGraphSelectedLinkId = String($(this).data('memoryLinkId') || '');
-        renderMemoryPanel();
+        $('#ai_wbr_memory_node_popover').hide();
+        showMemoryLinkPopover(String($(this).data('memoryLinkId') || ''), event.clientX, event.clientY);
     });
 
     container.on('mousedown.memoryGraphSvg', '.ai-wbr-memory-edge, .ai-wbr-memory-edge-hit', function (event) {
@@ -4460,11 +4568,10 @@ function bindMemoryGraphSvgInteractions() {
         lastObservedChatScopedUiSignature = getChatScopedUiSignature();
 
         if (!drag.moved) {
-            memoryGraphSelectedNodeId = drag.nodeId;
-            renderMemoryPanel();
-            $('#ai_wbr_memory_node_popover').hide();
+            showMemoryNodePopover(drag.nodeId, event.clientX, event.clientY);
         } else {
             $('#ai_wbr_memory_json').val(JSON.stringify(graph, null, 2));
+            renderMemoryGraphSvg(graph);
         }
     });
 
@@ -4530,11 +4637,50 @@ function bindMemoryGraphSvgInteractions() {
         $('#ai_wbr_memory_node_popover').hide();
     });
 
+    $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_link_popover .ai-wbr-memory-link-popover-save', function () {
+        const graph = getMemoryGraph();
+        const popover = $('#ai_wbr_memory_link_popover');
+        const link = graph.links.find(item => String(item.id) === String(popover.data('memoryLinkId')));
+        if (!link) {
+            return;
+        }
+        popover.find('[data-popover-link-field]').each(function () {
+            const field = String($(this).data('popoverLinkField'));
+            if (field === 'weight') {
+                link.weight = clampNumber($(this).val(), link.weight || 0.7, 0, 1);
+            } else {
+                link[field] = String($(this).val() || '');
+            }
+        });
+        link.updatedAt = new Date().toISOString();
+        graph.updatedAt = link.updatedAt;
+        saveMemoryGraph(graph);
+        popover.hide();
+    });
+
+    $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_link_popover .ai-wbr-memory-link-popover-delete', function () {
+        const graph = getMemoryGraph();
+        const popover = $('#ai_wbr_memory_link_popover');
+        const id = String(popover.data('memoryLinkId') || '');
+        graph.links = graph.links.filter(link => String(link.id) !== id);
+        if (memoryGraphSelectedLinkId === id) {
+            memoryGraphSelectedLinkId = '';
+        }
+        graph.updatedAt = new Date().toISOString();
+        saveMemoryGraph(graph);
+        popover.hide();
+    });
+
+    $(document).on('click.memoryGraphSvg', '#ai_wbr_memory_link_popover, #ai_wbr_memory_link_popover *', function (event) {
+        event.stopPropagation();
+    });
+
     container.on('click.memoryGraphSvg', function (event) {
-        if ($(event.target).closest('.ai-wbr-memory-node, .ai-wbr-memory-graph-toolbar').length) {
+        if ($(event.target).closest('.ai-wbr-memory-node, .ai-wbr-memory-edge, .ai-wbr-memory-edge-hit, .ai-wbr-memory-graph-toolbar').length) {
             return;
         }
         $('#ai_wbr_memory_node_popover').hide();
+        $('#ai_wbr_memory_link_popover').hide();
     });
 }
 
