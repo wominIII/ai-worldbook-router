@@ -4009,7 +4009,7 @@ function renderMemoryGraphSvg(graph) {
             <button class="menu_button ai-wbr-memory-arrange" type="button">重排</button>
             <span class="ai-wbr-memory-link-hint">${memoryGraphLinkSourceId ? `连线起点：${escapeHtml(graph.nodes.find(node => node.id === memoryGraphLinkSourceId)?.title || memoryGraphLinkSourceId)}` : ''}</span>
         </div>
-        <svg viewBox="${memoryGraphView.x} ${memoryGraphView.y} ${memoryGraphView.width} ${memoryGraphView.height}" preserveAspectRatio="none" role="img" aria-label="记忆图谱">${lines}${cards}</svg>
+        <svg viewBox="${memoryGraphView.x} ${memoryGraphView.y} ${memoryGraphView.width} ${memoryGraphView.height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="记忆图谱">${lines}${cards}</svg>
     `);
     bindMemoryGraphSvgInteractions();
 }
